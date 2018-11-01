@@ -34,13 +34,13 @@ Gem::Specification.new do |s|
   #s.test_files = files.grep %r/^(?:test|spec|feature)\/.*$/
 
   s.add_runtime_dependency 'asciidoctor', '~> 2.0'
-  s.add_runtime_dependency 'prawn', '~> 2.4.0'
-  s.add_runtime_dependency 'ttfunk', '~> 1.7.0' # pin ttfunk for compatiblity; prawn gem only pins it to major version
-  s.add_runtime_dependency 'matrix', '~> 0.4' # required until prawn >= 2.5.0 is released
+  s.add_runtime_dependency 'prawn', '~> 2.5.0'
+  #s.add_runtime_dependency 'ttfunk', '~> 1.7.0' # pin ttfunk for compatiblity; prawn gem only pins it to major version
+  #s.add_runtime_dependency 'matrix', '~> 0.4' # required until prawn >= 2.5.0 is released
   s.add_runtime_dependency 'prawn-table', '~> 0.2.0'
-  s.add_runtime_dependency 'prawn-templates', '~> 0.1.0'
-  s.add_runtime_dependency 'prawn-svg', '~> 0.34.0'
-  s.add_runtime_dependency 'prawn-icon', '~> 3.0.0'
+  s.add_runtime_dependency 'prawn-templates', '~> 0.1'
+  s.add_runtime_dependency 'prawn-svg', '~> 0.38'
+  s.add_runtime_dependency 'prawn-icon', '~> 4.1'
   s.add_runtime_dependency 'concurrent-ruby', '~> 1.3'
   s.add_runtime_dependency 'treetop', '~> 1.6.0'
 
