@@ -1,0 +1,44 @@
+From: Keith Packard <keithp@keithp.com>
+Date: Thu, 1 Nov 2018 13:21:05 -0700
+Subject: Fix dependencies for debian build.
+
+Removed prawn/templates, which eliminates the ability to use .pdf
+files as images.
+
+Changed prawn-svg version to >= 0.28.0
+Changed prawn-icon version to >= 1.4.0
+
+Signed-off-by: Keith Packard <keithp@keithp.com>
+---
+ asciidoctor-pdf.gemspec                    | 6 +++---
+ lib/asciidoctor-pdf/prawn-templates_ext.rb | 2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/asciidoctor-pdf.gemspec b/asciidoctor-pdf.gemspec
+index 940bc9f..59b23c9 100644
+--- a/asciidoctor-pdf.gemspec
++++ b/asciidoctor-pdf.gemspec
+@@ -43,10 +43,10 @@ An extension for Asciidoctor that converts AsciiDoc documents to PDF using the P
+   s.add_runtime_dependency 'prawn', '>= 1.3.0', '< 2.3.0'
+   s.add_runtime_dependency 'prawn-table', '0.2.2'
+   # prawn-templates >= 0.0.5 requires prawn >= 2.2.0, so we must cast a wider net to support Ruby 1.9.3
+-  s.add_runtime_dependency 'prawn-templates', '>= 0.0.3', '<= 0.1.1'
++  # s.add_runtime_dependency 'prawn-templates', '>= 0.0.3', '<= 0.1.1'
+   # prawn-svg >= 0.22.1 requires Ruby >= 2.0.0, so we must cast a wider net to support Ruby 1.9.3
+-  s.add_runtime_dependency 'prawn-svg', '>= 0.21.0', '< 0.28.0'
+-  s.add_runtime_dependency 'prawn-icon', '1.4.0'
++  s.add_runtime_dependency 'prawn-svg', '>= 0.28.0'
++  s.add_runtime_dependency 'prawn-icon', '>= 1.4.0'
+   s.add_runtime_dependency 'safe_yaml', '~> 1.0.4'
+   s.add_runtime_dependency 'thread_safe', '~> 0.3.6'
+   s.add_runtime_dependency 'concurrent-ruby', '~> 1.0.5'
+diff --git a/lib/asciidoctor-pdf/prawn-templates_ext.rb b/lib/asciidoctor-pdf/prawn-templates_ext.rb
+index fca8178..92fe260 100644
+--- a/lib/asciidoctor-pdf/prawn-templates_ext.rb
++++ b/lib/asciidoctor-pdf/prawn-templates_ext.rb
+@@ -2,4 +2,4 @@ class Prawn::Document
+   # NOTE allows prawn-templates 0.0.4 to be used with prawn >= 2.2.0
+   const_set :VALID_OPTIONS, (send :remove_const, :VALID_OPTIONS).dup if VALID_OPTIONS.frozen?
+ end
+-require 'prawn/templates'
++# require 'prawn/templates'
