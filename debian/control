@@ -40,4 +40,5 @@ Depends: ruby | ruby-interpreter,
          ${misc:Depends},
          ${shlibs:Depends}
 Description: Converts AsciiDoc documents to PDF using Prawn
- An extension for Asciidoctor that converts AsciiDoc documents to PDF using the Prawn PDF library.
+ An extension for Asciidoctor that converts AsciiDoc documents to PDF
+ using the Prawn PDF library.
