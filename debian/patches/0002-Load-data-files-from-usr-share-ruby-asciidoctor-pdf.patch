@@ -1,0 +1,24 @@
+From: Keith Packard <keithp@keithp.com>
+Date: Sun, 30 Dec 2018 16:57:09 -0800
+Subject: Load data files from /usr/share/ruby-asciidoctor-pdf
+
+Avoid using /usr/lib/ruby
+
+Signed-off-by: Keith Packard <keithp@keithp.com>
+---
+ lib/asciidoctor-pdf/theme_loader.rb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/asciidoctor-pdf/theme_loader.rb b/lib/asciidoctor-pdf/theme_loader.rb
+index 59f81fa..6507008 100644
+--- a/lib/asciidoctor-pdf/theme_loader.rb
++++ b/lib/asciidoctor-pdf/theme_loader.rb
+@@ -8,7 +8,7 @@ module Pdf
+ class ThemeLoader
+   include ::Asciidoctor::Pdf::Measurements
+ 
+-  DataDir = ::File.expand_path(::File.join(::File.dirname(__FILE__), '..', '..', 'data'))
++  DataDir = '/usr/share/ruby-asciidoctor-pdf/data'
+   ThemesDir = ::File.join DataDir, 'themes'
+   FontsDir = ::File.join DataDir, 'fonts'
+   DefaultThemePath = ::File.expand_path 'default-theme.yml', ThemesDir
