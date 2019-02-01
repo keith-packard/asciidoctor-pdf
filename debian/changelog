@@ -1,3 +1,10 @@
+ruby-asciidoctor-pdf (1.5.0~alpha.17.dev-3) unstable; urgency=medium
+
+  * Change treetop dependency to use current debian version.
+    Closes: #918234.
+
+ -- Keith Packard <keithp@keithp.com>  Fri, 01 Feb 2019 13:30:58 -0800
+
 ruby-asciidoctor-pdf (1.5.0~alpha.17.dev-2) unstable; urgency=medium
 
   * Bump debian version to recover from failed upload
