@@ -1,0 +1,470 @@
+From: Keith Packard <keithp@keithp.com>
+Date: Mon, 4 Feb 2019 10:49:11 -0800
+Subject: Add man page.
+
+This is an edited version of the asciidoctor man page
+
+Signed-off-by: Keith Packard <keithp@keithp.com>
+---
+ man/asciidoctor-pdf.1    | 256 +++++++++++++++++++++++++++++++++++++++++++++++
+ man/asciidoctor-pdf.adoc | 187 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 443 insertions(+)
+ create mode 100644 man/asciidoctor-pdf.1
+ create mode 100644 man/asciidoctor-pdf.adoc
+
+diff --git a/man/asciidoctor-pdf.1 b/man/asciidoctor-pdf.1
+new file mode 100644
+index 0000000..970bd71
+--- /dev/null
++++ b/man/asciidoctor-pdf.1
+@@ -0,0 +1,256 @@
++'\" t
++.\"     Title: asciidoctor-pdf
++.\"    Author: Dan Allen, Sarah White, Ryan Waldron
++.\" Generator: Asciidoctor 1.5.8
++.\"      Date: 2019-02-04
++.\"    Manual: Asciidoctor Manual
++.\"    Source: Asciidoctor 1.5.8
++.\"  Language: English
++.\"
++.TH "ASCIIDOCTOR\-PDF" "1" "2019-02-04" "Asciidoctor 1.5.8" "Asciidoctor Manual"
++.ie \n(.g .ds Aq \(aq
++.el       .ds Aq '
++.ss \n[.ss] 0
++.nh
++.ad l
++.de URL
++\fI\\$2\fP <\\$1>\\$3
++..
++.als MTO URL
++.if \n[.g] \{\
++.  mso www.tmac
++.  am URL
++.    ad l
++.  .
++.  am MTO
++.    ad l
++.  .
++.  LINKSTYLE blue R < >
++.\}
++.SH "NAME"
++asciidoctor\-pdf \- converts AsciiDoc source files to PDF format
++.SH "SYNOPSIS"
++.sp
++\fBasciidoctor\-pdf\fP [\fIOPTION\fP]... \fIFILE\fP...
++.SH "DESCRIPTION"
++.sp
++The asciidoctor\-pdf(1) command converts the AsciiDoc source file(s) \fIFILE\fP to PDF format.
++.sp
++If \fIFILE\fP is \fI\-\fP then the AsciiDoc source is read from standard input.
++.SH "OPTIONS"
++.SS "Security Settings"
++.sp
++\fB\-B, \-\-base\-dir\fP=\fIDIR\fP
++.RS 4
++Base directory containing the document and resources.
++Defaults to the directory containing the source file, or the working directory if the source is read from a stream.
++When combined with the safe mode setting, can be used to chroot the execution of the program.
++.RE
++.sp
++\fB\-S, \-\-safe\-mode\fP=\fISAFE_MODE\fP
++.RS 4
++Set safe mode level: \fIunsafe\fP, \fIsafe\fP, \fIserver\fP or \fIsecure\fP.
++Disables potentially dangerous macros in source files, such as \f(CRinclude::[]\fP.
++If not set, the safe mode level defaults to \fIunsafe\fP when Asciidoctor\-pdf is invoked using this script.
++.RE
++.sp
++\fB\-\-safe\fP
++.RS 4
++Set safe mode level to \fIsafe\fP.
++Enables include directives, but prevents access to ancestor paths of source file.
++Provided for compatibility with the asciidoc command.
++If not set, the safe mode level defaults to \fIunsafe\fP when Asciidoctor\-pdf is invoked using this script.
++.RE
++.SS "Document Settings"
++.sp
++\fB\-a, \-\-attribute\fP=\fIATTRIBUTE\fP
++.RS 4
++Define, override or delete a document attribute.
++Command\-line attributes take precedence over attributes defined in the source file unless the value ends with \fI@\fP.
++.sp
++\fIATTRIBUTE\fP is normally formatted as a key\-value pair, in the form \fINAME=VALUE\fP.
++Alternate acceptable forms are \fINAME\fP (where the \fIVALUE\fP defaults to an empty string), \fINAME!\fP (unassigns the \fINAME\fP attribute) and \fINAME=VALUE@\fP (where \fIVALUE\fP does not override value of \fINAME\fP attribute if it\(cqs already defined in the source document).
++Values containing spaces should be enclosed in quotes.
++.sp
++This option may be specified more than once.
++.RE
++.sp
++\fB\-d, \-\-doctype\fP=\fIDOCTYPE\fP
++.RS 4
++Document type: \fIarticle\fP, \fIbook\fP, \fImanpage\fP or \fIinline\fP.
++The \fIbook\fP document type allows multiple level\-0 section titles in a single document.
++The \fImanpage\fP document type enables parsing of metadata necessary to produce a man page.
++The \fIinline\fP document type allows the content of a single paragraph to be formatted and returned without wrapping it in a containing element.
++Defaults to \fIarticle\fP.
++.RE
++.SS "Document Conversion"
++.sp
++\fB\-D, \-\-destination\-dir\fP=\fIDIR\fP
++.RS 4
++Destination output directory.
++Defaults to the directory containing the source file, or the working directory if the source is read from a stream.
++If specified, the directory is resolved relative to the working directory.
++.RE
++.sp
++\fB\-E, \-\-template\-engine\fP=\fINAME\fP
++.RS 4
++Template engine to use for the custom converter templates.
++The gem with the same name as the engine will be loaded automatically.
++This name is also used to build the full path to the custom converter templates.
++If a template engine is not specified, it will be auto\-detected based on the file extension of the custom converter templates found.
++.RE
++.sp
++\fB\-e, \-\-eruby\fP
++.RS 4
++Specifies the eRuby implementation to use for executing the custom converter templates written in ERB.
++Supported values are \fIerb\fP and \fIerubis\fP.
++Defaults to \fIerb\fP.
++.RE
++.sp
++\fB\-I, \-\-load\-path\fP=\fIDIRECTORY\fP
++.RS 4
++Add the specified directory to the load path, so that \fI\-r\fP can load extensions from outside the default Ruby load path.
++This option may be specified more than once.
++.RE
++.sp
++\fB\-n, \-\-section\-numbers\fP
++.RS 4
++Auto\-number section titles.
++Synonym for \fB\-\-attribute sectnums\fP.
++.RE
++.sp
++\fB\-o, \-\-out\-file\fP=\fIOUT_FILE\fP
++.RS 4
++Write output to file \fIOUT_FILE\fP.
++Defaults to the base name of the input file suffixed with \fIbackend\fP extension.
++The file is resolved relative to the working directory.
++If the input is read from standard input or a named pipe (fifo), then the output file defaults to stdout.
++If \fIOUT_FILE\fP is \fI\-\fP, then the output file is written to standard output.
++.RE
++.sp
++\fB\-R, \-\-source\-dir\fP=\fIDIR\fP
++.RS 4
++Source directory.
++Currently only used if the destination directory is also specified.
++Used to preserve the directory structure of files converted within this directory in the destination directory.
++If specified, the directory is resolved relative to the working directory.
++.RE
++.sp
++\fB\-r, \-\-require\fP=\fILIBRARY\fP
++.RS 4
++Require the specified library before executing the processor, using the standard Ruby require.
++This option may be specified more than once.
++.RE
++.sp
++\fB\-s, \-\-no\-header\-footer\fP
++.RS 4
++Output an embeddable document, which excludes the header, the footer, and everything outside the body of the document.
++This option is useful for producing documents that can be inserted into an external template.
++.RE
++.sp
++\fB\-T, \-\-template\-dir\fP=\fIDIR\fP
++.RS 4
++A directory containing custom converter templates that override one or more templates from the built\-in set.
++(requires \fItilt\fP gem)
++.sp
++If there is a subfolder that matches the engine name (if specified), that folder is appended to the template directory path.
++Similarly, if there is a subfolder in the resulting template directory that matches the name of the backend, that folder is appended to the template directory path.
++.sp
++This option may be specified more than once.
++Matching templates found in subsequent directories override ones previously discovered.
++.RE
++.SS "Processing Information"
++.sp
++\fB\-\-failure\-level\fP=\fILEVEL\fP
++.RS 4
++The minimum logging level that triggers a non\-zero exit code (failure).
++If this option is not set (default: FATAL), the program exits with a status code zero even if warnings or errors have been logged.
++.RE
++.sp
++\fB\-q, \-\-quiet\fP
++.RS 4
++Silence warnings.
++.RE
++.sp
++\fB\-\-trace\fP
++.RS 4
++Include backtrace information on errors.
++Not enabled by default.
++.RE
++.sp
++\fB\-v, \-\-verbose\fP
++.RS 4
++Verbosely print processing information and configuration file checks to stderr.
++.RE
++.sp
++\fB\-t, \-\-timings\fP
++.RS 4
++Display timings information (time to read, parse and convert).
++.RE
++.SS "Program Information"
++.sp
++\fB\-h, \-\-help\fP [\fITOPIC\fP]
++.RS 4
++Print the help message.
++Show the command usage if \fITOPIC\fP is not specified (or not recognized).
++.RE
++.sp
++\fB\-V, \-\-version\fP
++.RS 4
++Print program version number.
++.sp
++\f(CR\-v\fP can also be used if no other flags or arguments are present.
++.RE
++.SH "ENVIRONMENT"
++.sp
++\fBAsciidoctor\-pdf\fP honors the \fBSOURCE_DATE_EPOCH\fP environment variable.
++If this variable is assigned an integer value, that value is used as the epoch of all input documents and as the local date and time.
++See \c
++.URL "https://reproducible\-builds.org/specs/source\-date\-epoch/" "" " "
++for more information about this environment variable.
++.SH "EXIT STATUS"
++.sp
++\fB0\fP
++.RS 4
++Success.
++.RE
++.sp
++\fB1\fP
++.RS 4
++Failure (syntax or usage error; configuration error; document processing failure; unexpected error).
++.RE
++.SH "BUGS"
++.sp
++Refer to the \fBAsciidoctor\fP issue tracker at \c
++.URL "https://github.com/asciidoctor/asciidoctor/issues?q=is%3Aopen" "" "."
++.SH "AUTHORS"
++.sp
++\fBAsciidoctor\-pdf\fP was written by Dan Allen, Ryan Waldron, Jason Porter, Nick Hengeveld and other contributors.
++.sp
++\fBAsciidoctor\fP was written by Dan Allen, Ryan Waldron, Jason Porter, Nick Hengeveld and other contributors.
++.sp
++\fBAsciiDoc\fP was written by Stuart Rackham and has received contributions from many other individuals.
++.SH "RESOURCES"
++.sp
++\fBProject web site:\fP \c
++.URL "https://asciidoctor.org" "" ""
++.sp
++\fBGit source repository on GitHub:\fP \c
++.URL "https://github.com/asciidoctor/asciidoctor\-pdf" "" ""
++.sp
++\fBGitHub organization:\fP \c
++.URL "https://github.com/asciidoctor" "" ""
++.sp
++\fBDiscussion list / forum:\fP \c
++.URL "http://discuss.asciidoctor.org" "" ""
++.SH "COPYING"
++.sp
++Copyright (C) 2012\-2018 Dan Allen, Ryan Waldron and the Asciidoctor Project.
++Free use of this software is granted under the terms of the MIT License.
++.SH "AUTHORS"
++.sp
++Dan Allen
++.sp
++Sarah White
++.sp
++Ryan Waldron
+\ No newline at end of file
+diff --git a/man/asciidoctor-pdf.adoc b/man/asciidoctor-pdf.adoc
+new file mode 100644
+index 0000000..d3dc7cd
+--- /dev/null
++++ b/man/asciidoctor-pdf.adoc
+@@ -0,0 +1,187 @@
++= asciidoctor-pdf(1)
++Dan Allen; Sarah White; Ryan Waldron
++:doctype: manpage
++:man manual: Asciidoctor Manual
++:man source: Asciidoctor 1.5.8
++:page-layout: base
++
++== NAME
++
++asciidoctor-pdf - converts AsciiDoc source files to PDF format
++
++== SYNOPSIS
++
++*asciidoctor-pdf* [_OPTION_]... _FILE_...
++
++== DESCRIPTION
++
++The asciidoctor-pdf(1) command converts the AsciiDoc source file(s) _FILE_ to PDF format.
++
++If _FILE_ is _-_ then the AsciiDoc source is read from standard input.
++
++== OPTIONS
++
++=== Security Settings
++
++*-B, --base-dir*=_DIR_::
++  Base directory containing the document and resources.
++  Defaults to the directory containing the source file, or the working directory if the source is read from a stream.
++  When combined with the safe mode setting, can be used to chroot the execution of the program.
++
++*-S, --safe-mode*=_SAFE_MODE_::
++  Set safe mode level: _unsafe_, _safe_, _server_ or _secure_.
++  Disables potentially dangerous macros in source files, such as `include::[]`.
++  If not set, the safe mode level defaults to _unsafe_ when Asciidoctor-pdf is invoked using this script.
++
++*--safe*::
++  Set safe mode level to _safe_.
++  Enables include directives, but prevents access to ancestor paths of source file.
++  Provided for compatibility with the asciidoc command.
++  If not set, the safe mode level defaults to _unsafe_ when Asciidoctor-pdf is invoked using this script.
++
++=== Document Settings
++
++*-a, --attribute*=_ATTRIBUTE_::
++  Define, override or delete a document attribute.
++  Command-line attributes take precedence over attributes defined in the source file unless the value ends with _@_.
+++
++_ATTRIBUTE_ is normally formatted as a key-value pair, in the form _NAME=VALUE_.
++Alternate acceptable forms are _NAME_ (where the _VALUE_ defaults to an empty string), _NAME!_ (unassigns the _NAME_ attribute) and _NAME=VALUE@_ (where _VALUE_ does not override value of _NAME_ attribute if it's already defined in the source document).
++Values containing spaces should be enclosed in quotes.
+++
++This option may be specified more than once.
++
++*-d, --doctype*=_DOCTYPE_::
++  Document type: _article_, _book_, _manpage_ or _inline_.
++  The _book_ document type allows multiple level-0 section titles in a single document.
++  The _manpage_ document type enables parsing of metadata necessary to produce a man page.
++  The _inline_ document type allows the content of a single paragraph to be formatted and returned without wrapping it in a containing element.
++  Defaults to _article_.
++
++=== Document Conversion
++
++*-D, --destination-dir*=_DIR_::
++  Destination output directory.
++  Defaults to the directory containing the source file, or the working directory if the source is read from a stream.
++  If specified, the directory is resolved relative to the working directory.
++
++*-E, --template-engine*=_NAME_::
++  Template engine to use for the custom converter templates.
++  The gem with the same name as the engine will be loaded automatically.
++  This name is also used to build the full path to the custom converter templates.
++  If a template engine is not specified, it will be auto-detected based on the file extension of the custom converter templates found.
++
++*-e, --eruby*::
++  Specifies the eRuby implementation to use for executing the custom converter templates written in ERB.
++  Supported values are _erb_ and _erubis_.
++  Defaults to _erb_.
++
++*-I, --load-path*=_DIRECTORY_::
++  Add the specified directory to the load path, so that _-r_ can load extensions from outside the default Ruby load path.
++  This option may be specified more than once.
++
++*-n, --section-numbers*::
++  Auto-number section titles.
++  Synonym for *--attribute sectnums*.
++
++*-o, --out-file*=_OUT_FILE_::
++  Write output to file _OUT_FILE_.
++  Defaults to the base name of the input file suffixed with _backend_ extension.
++  The file is resolved relative to the working directory.
++  If the input is read from standard input or a named pipe (fifo), then the output file defaults to stdout.
++  If _OUT_FILE_ is _-_, then the output file is written to standard output.
++
++*-R, --source-dir*=_DIR_::
++  Source directory.
++  Currently only used if the destination directory is also specified.
++  Used to preserve the directory structure of files converted within this directory in the destination directory.
++  If specified, the directory is resolved relative to the working directory.
++
++*-r, --require*=_LIBRARY_::
++  Require the specified library before executing the processor, using the standard Ruby require.
++  This option may be specified more than once.
++
++*-s, --no-header-footer*::
++  Output an embeddable document, which excludes the header, the footer, and everything outside the body of the document.
++  This option is useful for producing documents that can be inserted into an external template.
++
++*-T, --template-dir*=_DIR_::
++  A directory containing custom converter templates that override one or more templates from the built-in set.
++  (requires _tilt_ gem)
+++
++If there is a subfolder that matches the engine name (if specified), that folder is appended to the template directory path.
++Similarly, if there is a subfolder in the resulting template directory that matches the name of the backend, that folder is appended to the template directory path.
+++
++This option may be specified more than once.
++Matching templates found in subsequent directories override ones previously discovered.
++
++=== Processing Information
++
++*--failure-level*=_LEVEL_::
++  The minimum logging level that triggers a non-zero exit code (failure).
++  If this option is not set (default: FATAL), the program exits with a status code zero even if warnings or errors have been logged.
++
++*-q, --quiet*::
++  Silence warnings.
++
++*--trace*::
++  Include backtrace information on errors.
++  Not enabled by default.
++
++*-v, --verbose*::
++  Verbosely print processing information and configuration file checks to stderr.
++
++*-t, --timings*::
++  Display timings information (time to read, parse and convert).
++
++=== Program Information
++
++*-h, --help* [_TOPIC_]::
++  Print the help message.
++  Show the command usage if _TOPIC_ is not specified (or not recognized).
++
++*-V, --version*::
++  Print program version number.
+++
++`-v` can also be used if no other flags or arguments are present.
++
++== ENVIRONMENT
++
++*Asciidoctor-pdf* honors the *SOURCE_DATE_EPOCH* environment variable.
++If this variable is assigned an integer value, that value is used as the epoch of all input documents and as the local date and time.
++See https://reproducible-builds.org/specs/source-date-epoch/ for more information about this environment variable.
++
++== EXIT STATUS
++
++*0*::
++  Success.
++
++*1*::
++  Failure (syntax or usage error; configuration error; document processing failure; unexpected error).
++
++== BUGS
++
++Refer to the *Asciidoctor* issue tracker at https://github.com/asciidoctor/asciidoctor/issues?q=is%3Aopen.
++
++== AUTHORS
++
++*Asciidoctor-pdf* was written by Dan Allen, Ryan Waldron, Jason Porter, Nick Hengeveld and other contributors.
++
++*Asciidoctor* was written by Dan Allen, Ryan Waldron, Jason Porter, Nick Hengeveld and other contributors.
++
++*AsciiDoc* was written by Stuart Rackham and has received contributions from many other individuals.
++
++== RESOURCES
++
++*Project web site:* https://asciidoctor.org
++
++*Git source repository on GitHub:* https://github.com/asciidoctor/asciidoctor-pdf
++
++*GitHub organization:* https://github.com/asciidoctor
++
++*Discussion list / forum:* http://discuss.asciidoctor.org
++
++== COPYING
++
++Copyright \(C) 2012-2018 Dan Allen, Ryan Waldron and the Asciidoctor Project.
++Free use of this software is granted under the terms of the MIT License.

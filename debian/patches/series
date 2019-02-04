@@ -1,2 +1,3 @@
 0001-Fix-dependencies-for-debian-build.patch
 0002-Load-data-files-from-usr-share-ruby-asciidoctor-pdf.patch
+0003-Add-man-page.patch
