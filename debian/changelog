@@ -1,3 +1,14 @@
+ruby-asciidoctor-pdf (1.5.0~alpha.17.dev-5) unstable; urgency=medium
+
+  * Change debian/watch to mangle remote version numbers including
+    'alpha'.
+
+  * Point Vcs-Git and Vcs-Browser at current debian git repository.
+
+  * Add man page.
+
+ -- Keith Packard <keithp@keithp.com>  Mon, 04 Feb 2019 10:12:24 -0800
+
 ruby-asciidoctor-pdf (1.5.0~alpha.17.dev-4) unstable; urgency=medium
 
   * Change Vcs-Git and Vcs-Browser to point at
