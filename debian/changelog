@@ -1,3 +1,11 @@
+ruby-asciidoctor-pdf (1.5.0~alpha.17.dev-4) unstable; urgency=medium
+
+  * Change Vcs-Git and Vcs-Browser to point at
+    https://salsa.debian.org/keithp/asciidoctor-pdf
+    Closes: #918885.
+
+ -- Keith Packard <keithp@keithp.com>  Sun, 03 Feb 2019 22:02:20 -0800
+
 ruby-asciidoctor-pdf (1.5.0~alpha.17.dev-3) unstable; urgency=medium
 
   * Change treetop dependency to use current debian version.
