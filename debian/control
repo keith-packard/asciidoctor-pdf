@@ -5,6 +5,7 @@ Maintainer: Debian Ruby Extras Maintainers <pkg-ruby-extras-maintainers@lists.al
 Uploaders: Keith Packard <keithp@keithp.com>
 Build-Depends: debhelper (>= 11~),
                gem2deb,
+               ruby (>= 1:2.5.1),
                ruby-asciidoctor (>= 1.5.0),
                ruby-concurrent (>= 1.0.5),
                ruby-prawn (<< 2.3.0),
@@ -26,7 +27,7 @@ Rules-Requires-Root: no
 Package: ruby-asciidoctor-pdf
 Architecture: all
 XB-Ruby-Versions: ${ruby:Versions}
-Depends: ruby | ruby-interpreter,
+Depends: ruby (>= 1:2.5.1),
          ruby-asciidoctor (>= 1.5.0),
          ruby-concurrent (>= 1.0.5),
          ruby-prawn (<< 2.3.0),
