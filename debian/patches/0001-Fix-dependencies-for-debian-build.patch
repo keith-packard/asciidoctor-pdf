@@ -5,42 +5,34 @@ Subject: Fix dependencies for debian build.
 Removed prawn/templates, which eliminates the ability to use .pdf
 files as images.
 
-Changed prawn-svg version to >= 0.28.0
-Changed prawn-icon version to >= 1.4.0
-
-v2:
-
-Changed treetop version to >= 1.5.3
-Reported by: Santiago Vila <sanvila@debian.org>
-
 Signed-off-by: Keith Packard <keithp@keithp.com>
 ---
- asciidoctor-pdf.gemspec                    | 8 ++++----
+ asciidoctor-pdf.gemspec                    | 6 +++---
  lib/asciidoctor-pdf/prawn-templates_ext.rb | 2 +-
- 2 files changed, 5 insertions(+), 5 deletions(-)
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/asciidoctor-pdf.gemspec b/asciidoctor-pdf.gemspec
-index 940bc9f..b66e4ba 100644
+index 6796786..3d430ce 100644
 --- a/asciidoctor-pdf.gemspec
 +++ b/asciidoctor-pdf.gemspec
-@@ -43,13 +43,13 @@ An extension for Asciidoctor that converts AsciiDoc documents to PDF using the P
-   s.add_runtime_dependency 'prawn', '>= 1.3.0', '< 2.3.0'
-   s.add_runtime_dependency 'prawn-table', '0.2.2'
-   # prawn-templates >= 0.0.5 requires prawn >= 2.2.0, so we must cast a wider net to support Ruby 1.9.3
--  s.add_runtime_dependency 'prawn-templates', '>= 0.0.3', '<= 0.1.1'
-+  # s.add_runtime_dependency 'prawn-templates', '>= 0.0.3', '<= 0.1.1'
-   # prawn-svg >= 0.22.1 requires Ruby >= 2.0.0, so we must cast a wider net to support Ruby 1.9.3
--  s.add_runtime_dependency 'prawn-svg', '>= 0.21.0', '< 0.28.0'
--  s.add_runtime_dependency 'prawn-icon', '1.4.0'
-+  s.add_runtime_dependency 'prawn-svg', '>= 0.28.0'
-+  s.add_runtime_dependency 'prawn-icon', '>= 1.4.0'
-   s.add_runtime_dependency 'safe_yaml', '~> 1.0.4'
-   s.add_runtime_dependency 'thread_safe', '~> 0.3.6'
-   s.add_runtime_dependency 'concurrent-ruby', '~> 1.0.5'
-   # For our usage, treetop 1.6.2 is slower than 1.5.3
--  s.add_runtime_dependency 'treetop', '1.5.3'
-+  s.add_runtime_dependency 'treetop', '>= 1.5.3'
- end
+@@ -38,14 +38,14 @@ Gem::Specification.new do |s|
+   s.add_runtime_dependency 'asciidoctor', '>= 1.5.3', '< 3.0.0'
+   s.add_runtime_dependency 'prawn', '~> 2.2.0'
+   s.add_runtime_dependency 'prawn-table', '~> 0.2.0'
+-  s.add_runtime_dependency 'prawn-templates', '~> 0.1.0'
++  # s.add_runtime_dependency 'prawn-templates', '~> 0.1.0'
+   s.add_runtime_dependency 'prawn-svg', '~> 0.29.0'
+   s.add_runtime_dependency 'prawn-icon', '~> 2.3.0'
+   s.add_runtime_dependency 'safe_yaml', '~> 1.0.0'
+   s.add_runtime_dependency 'thread_safe', '~> 0.3.0'
+-  s.add_runtime_dependency 'concurrent-ruby', '~> 1.1.0'
++  s.add_runtime_dependency 'concurrent-ruby', '~> 1.0.5'
+   # For our usage, treetop 1.6 is slower than treetop 1.5
+-  s.add_runtime_dependency 'treetop', '~> 1.5.0'
++  s.add_runtime_dependency 'treetop', '>= 1.5.0'
+ 
+   s.add_development_dependency 'rake', '~> 12.3.0'
+   # Asciidoctor PDF supports Rouge >= 2; Rouge 3.4.1 emits a superfluous warning in verbose mode
 diff --git a/lib/asciidoctor-pdf/prawn-templates_ext.rb b/lib/asciidoctor-pdf/prawn-templates_ext.rb
 index fca8178..92fe260 100644
 --- a/lib/asciidoctor-pdf/prawn-templates_ext.rb
