@@ -1,26 +1,36 @@
-begin
-  require 'unicode' unless defined? Unicode::VERSION
-rescue LoadError
+unless RUBY_VERSION >= '2.4'
   begin
-    require 'active_support/multibyte' unless defined? ActiveSupport::Multibyte
-  rescue LoadError; end
+    require 'unicode' unless defined? Unicode::VERSION
+  rescue LoadError
+    begin
+      require 'active_support/multibyte' unless defined? ActiveSupport::Multibyte
+    rescue LoadError; end
+  end
 end
 
 module Asciidoctor
-module Pdf
+module PDF
 module Sanitizer
-  BuiltInEntityChars = {
-    '&lt;' => '<',
-    '&gt;' => '>',
-    '&amp;' => '&'
+  XMLSpecialChars = {
+    '&lt;' => ?<,
+    '&gt;' => ?>,
+    '&amp;' => ?&,
   }
-  BuiltInEntityCharRx = /(?:#{BuiltInEntityChars.keys * '|'})/
-  BuiltInEntityCharOrTagRx = /(?:#{BuiltInEntityChars.keys * '|'}|<)/
-  InverseBuiltInEntityChars = BuiltInEntityChars.invert
-  InverseBuiltInEntityCharRx = /[#{InverseBuiltInEntityChars.keys.join}]/
-  NumericCharRefRx = /&#(\d{2,6});/
-  XmlSanitizeRx = /<[^>]+>/
-  SegmentPcdataRx = /(?:(&[a-z]+;|<[^>]+>)|([^&<]+))/
+  XMLSpecialCharsRx = /(?:#{XMLSpecialChars.keys * ?|})/
+  InverseXMLSpecialChars = XMLSpecialChars.invert
+  InverseXMLSpecialCharsRx = /[#{InverseXMLSpecialChars.keys.join}]/
+  (BuiltInNamedEntities = {
+    'amp' => ?&,
+    'apos' => ?',
+    'gt' => ?>,
+    'lt' => ?<,
+    'nbsp' => ' ',
+    'quot' => ?",
+  }).default = ??
+  SanitizeXMLRx = /<[^>]+>/
+  XMLMarkupRx = /&#?[a-z\d]+;|</
+  CharRefRx = /&(?:([a-z][a-z]+\d{0,2})|#(?:(\d\d\d{0,4})|x([a-f\d][a-f\d][a-f\d]{0,3})));/
+  SiftPCDATARx = /(&#?[a-z\d]+;|<[^>]+>)|([^&<]+)/
 
   # Strip leading, trailing and repeating whitespace, remove XML tags and
   # resolve all entities in the specified string.
@@ -29,19 +39,22 @@ module Sanitizer
   # FIXME add option to control escaping entities, or a filter mechanism in general
   def sanitize string
     string.strip
-        .gsub(XmlSanitizeRx, '')
+        .gsub(SanitizeXMLRx, '')
         .tr_s(' ', ' ')
-        .gsub(NumericCharRefRx) { [$1.to_i].pack('U*') }
-        .gsub(BuiltInEntityCharRx, BuiltInEntityChars)
+        .gsub(CharRefRx) { $1 ? BuiltInNamedEntities[$1] : [$2 ? $2.to_i : ($3.to_i 16)].pack('U1') }
   end
 
   def escape_xml string
-    string.gsub InverseBuiltInEntityCharRx, InverseBuiltInEntityChars
+    string.gsub InverseXMLSpecialCharsRx, InverseXMLSpecialChars
+  end
+
+  def encode_quotes string
+    (string.include? ?") ? (string.gsub ?", '&quot;') : string
   end
 
   def uppercase_pcdata string
-    if BuiltInEntityCharOrTagRx =~ string
-      string.gsub(SegmentPcdataRx) { $2 ? (uppercase_mb $2) : $1 }
+    if XMLMarkupRx.match? string
+      string.gsub(SiftPCDATARx) { $2 ? (uppercase_mb $2) : $1 }
     else
       uppercase_mb string
     end

@@ -3,20 +3,14 @@ source 'https://rubygems.org'
 # Look in asciidoctor-pdf.gemspec for runtime and development dependencies
 gemspec
 
-if (ruby_version = Gem::Version.new RUBY_VERSION) < (Gem::Version.new '2.1.0')
-  if ruby_version < (Gem::Version.new '2.0.0')
-    gem 'addressable', '2.4.0'
-    gem 'prawn', '1.3.0'
-    gem 'prawn-svg', '0.21.0'
-  else
-    gem 'prawn', '2.1.0'
-    gem 'prawn-svg', '0.26.0'
-  end
-end
+gem 'asciidoctor', ENV['ASCIIDOCTOR_VERSION'], require: false if ENV.key? 'ASCIIDOCTOR_VERSION'
+# NOTE use prawn-table from upstream (pre-0.2.3) to verify fix for #599
+gem 'prawn-table', git: 'https://github.com/prawnpdf/prawn-table.git', ref: '515f2db294866a343b05d15f94e5fb417a32f6ff'
+# Add unicode (preferred) or activesupport to transform case of text containing multibyte chars on Ruby < 2.4
+gem 'unicode', require: false if (Gem::Version.new RUBY_VERSION) < (Gem::Version.new '2.4.0')
+#gem 'activesupport', '4.2.7.1', require: false if (Gem::Version.new RUBY_VERSION) < (Gem::Version.new '2.4.0')
+gem 'rouge', ENV['ROUGE_VERSION'], require: false if ENV.key? 'ROUGE_VERSION'
 
-group :examples do
-  gem 'rouge', '2.2.1'
-  # Add unicode (preferred) or activesupport to transform case of text containing multibyte chars on Ruby < 2.4
-  #gem 'activesupport', '4.2.7.1' if (Gem::Version.new RUBY_VERSION) < (Gem::Version.new '2.4.0')
-  #gem 'unicode' if (Gem::Version.new RUBY_VERSION) < (Gem::Version.new '2.4.0')
+group :docs do
+  gem 'yard', require: false
 end

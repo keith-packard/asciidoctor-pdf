@@ -1,7 +1,13 @@
 module Asciidoctor
-module Pdf
+module PDF
 module FormattedText
 class Formatter
+  if defined? ::Asciidoctor::Logging
+    include ::Asciidoctor::Logging
+  else
+    include ::Asciidoctor::LoggingShim
+  end
+
   FormattingSnifferPattern = /[<&]/
   WHITESPACE = " \t\n"
 
@@ -13,13 +19,20 @@ class Formatter
   def format string, *args
     options = args[0] || {}
     string = string.tr_s(WHITESPACE, ' ') if options[:normalize]
-    return [text: string] unless string.match(FormattingSnifferPattern)
+    return [text: string] unless FormattingSnifferPattern.match? string
     if (parsed = @parser.parse(string))
       @transform.apply(parsed.content)
     else
-      warn %(Failed to parse formatted text: #{string})
+      logger.error %(failed to parse formatted text: #{string})
       [text: string]
     end
+  end
+
+  # The original purpose of this method is to split paragraphs, but our formatter only works on paragraphs that have
+  # been presplit. Therefore, we just need to wrap the fragments in a single-element array (representing a single
+  # paragraph) and return them.
+  def array_paragraphs fragments
+    [fragments]
   end
 end
 end

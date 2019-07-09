@@ -1,32 +1,24 @@
-module Asciidoctor::Pdf::FormattedText
+module Asciidoctor::PDF::FormattedText
 module InlineImageArranger
-  include ::Asciidoctor::Pdf::Measurements
+  include ::Asciidoctor::PDF::Measurements
+  if defined? ::Asciidoctor::Logging
+    include ::Asciidoctor::Logging
+  else
+    include ::Asciidoctor::LoggingShim
+  end
 
   ImagePlaceholderChar = '.'
   begin
-    require 'thread_safe' unless defined? ::ThreadSafe
-    PlaceholderWidthCache = ::ThreadSafe::Cache.new
+    require 'concurrent/map' unless defined? ::Concurrent::Map
+    PlaceholderWidthCache = ::Concurrent::Map.new
   rescue
     PlaceholderWidthCache = {}
   end
-  TemporaryPath = ::Asciidoctor::Pdf::TemporaryPath
+  TemporaryPath = ::Asciidoctor::PDF::TemporaryPath
 
-  if respond_to? :prepend
-    def wrap fragments
-      arrange_images fragments
-      super
-    end
-  else
-    class << self
-      def extended base
-        base.class.__send__ :alias_method, :_initial_wrap, :wrap
-      end
-    end
-
-    def wrap fragments
-      arrange_images fragments
-      _initial_wrap fragments
-    end
+  def wrap fragments
+    arrange_images fragments
+    super
   end
 
   # Iterates over the fragments that represent inline images and prepares the
@@ -71,10 +63,12 @@ module InlineImageArranger
 
         # TODO make helper method to calculate width and height of image
         if fragment[:image_format] == 'svg'
-          svg_obj = ::Prawn::Svg::Interface.new ::IO.read(image_path), doc,
+          svg_obj = ::Prawn::SVG::Interface.new ::File.read(image_path), doc,
               at: doc.bounds.top_left,
               width: image_w,
-              fallback_font_name: doc.default_svg_font
+              fallback_font_name: doc.default_svg_font,
+              enable_web_requests: doc.allow_uri_read,
+              enable_file_requests_with_root: (::File.dirname image_path)
           svg_size = image_w ? svg_obj.document.sizing :
               # NOTE convert intrinsic dimensions to points; constrain to content width
               (svg_obj.resize width: [(to_pt svg_obj.document.sizing.output_width, :px), available_w].min)
@@ -144,8 +138,8 @@ module InlineImageArranger
         #fragment[:image_width] = fragment[:width] = image_w
         fragment[:image_width] = image_w
         fragment[:image_height] = image_h
-      rescue => e
-        warn %(asciidoctor: WARNING: could not embed image: #{image_path}; #{e.message})
+      rescue
+        logger.warn %(could not embed image: #{image_path}; #{$!.message})
         drop = true # delegate to cleanup logic in ensure block
       ensure
         # NOTE skip rendering image in scratch document or if image can't be loaded
@@ -162,11 +156,5 @@ module InlineImageArranger
   end
 end
 
-if respond_to? :prepend
-  class ::Prawn::Text::Formatted::Box
-    prepend InlineImageArranger
-  end
-else
-  ::Prawn::Text::Formatted::Box.extensions << InlineImageArranger
-end
+::Prawn::Text::Formatted::Box.prepend InlineImageArranger
 end

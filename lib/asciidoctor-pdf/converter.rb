@@ -17,18 +17,22 @@ require_relative 'sanitizer'
 require_relative 'prawn_ext'
 require_relative 'formatted_text'
 require_relative 'pdfmark'
-require_relative 'asciidoctor_ext'
 require_relative 'theme_loader'
 require_relative 'roman_numeral'
 require_relative 'index_catalog'
 
 autoload :StringIO, 'stringio'
-autoload :Tempfile, ::File.join((::File.dirname __FILE__), 'core_ext/tempfile')
+autoload :Tempfile, 'tempfile'
 
 module Asciidoctor
-module Pdf
+module PDF
 class Converter < ::Prawn::Document
   include ::Asciidoctor::Converter
+  if defined? ::Asciidoctor::Logging
+    include ::Asciidoctor::Logging
+  else
+    include ::Asciidoctor::LoggingShim
+  end
   include ::Asciidoctor::Writer
   include ::Asciidoctor::Prawn::Extensions
 
@@ -40,18 +44,20 @@ class Converter < ::Prawn::Document
 
   AsciidoctorVersion = ::Gem::Version.create ::Asciidoctor::VERSION
   AdmonitionIcons = {
-    caution:   { name: 'fa-fire', stroke_color: 'BF3400', size: 24 },
-    important: { name: 'fa-exclamation-circle', stroke_color: 'BF0000', size: 24 },
-    note:      { name: 'fa-info-circle', stroke_color: '19407C', size: 24 },
-    tip:       { name: 'fa-lightbulb-o', stroke_color: '111111', size: 24 },
-    warning:   { name: 'fa-exclamation-triangle', stroke_color: 'BF6900', size: 24 }
+    caution:   { name: 'fas-fire', stroke_color: 'BF3400', size: 24 },
+    important: { name: 'fas-exclamation-circle', stroke_color: 'BF0000', size: 24 },
+    note:      { name: 'fas-info-circle', stroke_color: '19407C', size: 24 },
+    tip:       { name: 'far-lightbulb', stroke_color: '111111', size: 24 },
+    warning:   { name: 'fas-exclamation-triangle', stroke_color: 'BF6900', size: 24 }
   }
-  TextAlignmentNames = ['left', 'center', 'right', 'justify']
+  TextAlignmentNames = ['justify', 'left', 'center', 'right']
+  TextAlignmentRoles = ['text-justify', 'text-left', 'text-center', 'text-right']
   BlockAlignmentNames = ['left', 'center', 'right']
   AlignmentTable = { '<' => :left, '=' => :center, '>' => :right }
   ColumnPositions = [:left, :center, :right]
   PageLayouts = [:portrait, :landscape]
   PageSides = [:recto, :verso]
+  (PDFVersions = { '1.3' => 1.3, '1.4' => 1.4, '1.5' => 1.5, '1.6' => 1.6, '1.7' => 1.7 }).default = 1.4
   LF = %(\n)
   DoubleLF = %(\n\n)
   TAB = %(\t)
@@ -85,14 +91,13 @@ class Converter < ::Prawn::Document
   MeasurementRxt = '\\d+(?:\\.\\d+)?(?:in|cm|mm|p[txc])?'
   MeasurementPartsRx = /^(\d+(?:\.\d+)?)(in|mm|cm|p[txc])?$/
   PageSizeRx = /^(?:\[(#{MeasurementRxt}), ?(#{MeasurementRxt})\]|(#{MeasurementRxt})(?: x |x)(#{MeasurementRxt})|\S+)$/
-  # CalloutExtractRx synced from /lib/asciidoctor.rb of Asciidoctor core
-  CalloutExtractRx = /(?:(?:\/\/|#|--|;;) ?)?(\\)?<!?(--|)(\d+)\2> ?(?=(?:\\?<!?\2\d+\2> ?)*$)/
+  CalloutExtractRx = /(?:(?:\/\/|#|--|;;) ?)?(\\)?<!?(|--)(\d+|\.)\2> ?(?=(?:\\?<!?\2(?:\d+|\.)\2>)*$)/
   ImageAttributeValueRx = /^image:{1,2}(.*?)\[(.*?)\]$/
   UriBreakCharsRx = /(?:\/|\?|&amp;|#)(?!$)/
   UriBreakCharRepl = %(\\&#{ZeroWidthSpace})
   UriSchemeBoundaryRx = /(?<=:\/\/)/
   LineScanRx = /\n|.+/
-  BlankLineRx = /\n[[:blank:]]*\n/
+  BlankLineRx = /\n{2,}/
   WhitespaceChars = %( \t\n)
   SourceHighlighters = ['coderay', 'pygments', 'rouge'].to_set
   PygmentsBgColorRx = /^\.highlight +{ *background: *#([^;]+);/
@@ -101,12 +106,17 @@ class Converter < ::Prawn::Document
   def initialize backend, opts
     super
     basebackend 'html'
+    filetype 'pdf'
+    htmlsyntax 'html'
     outfilesuffix '.pdf'
-    #htmlsyntax 'xml'
-    @list_numbers = []
-    @list_bullets = []
+    if (doc = opts[:document])
+      # NOTE enabling data-uri forces Asciidoctor Diagram to produce absolute image paths
+      doc.attributes['data-uri'] = ((doc.instance_variable_get :@attribute_overrides) || {})['data-uri'] = ''
+    end
     @capabilities = {
-      expands_tabs: (::Asciidoctor::VERSION.start_with? '1.5.3.') || AsciidoctorVersion >= (::Gem::Version.create '1.5.3')
+      expands_tabs: (::Asciidoctor::VERSION.start_with? '1.5.3.') || AsciidoctorVersion >= (::Gem::Version.create '1.5.3'),
+      special_sectnums: AsciidoctorVersion >= (::Gem::Version.create '1.5.7'),
+      syntax_highlighter: AsciidoctorVersion >= (::Gem::Version.create '2.0.0'),
     }
   end
 
@@ -118,7 +128,7 @@ class Converter < ::Prawn::Document
       result = send method_name, node
     else
       # TODO delegate to convert_method_missing
-      warn %(asciidoctor: WARNING: conversion missing in backend #{@backend} for #{name})
+      logger.warn %(conversion missing in backend #{@backend} for #{name})
     end
     # NOTE inline nodes generate pseudo-HTML strings; the remainder write directly to PDF object
     ::Asciidoctor::Inline === node ? result : self
@@ -141,22 +151,23 @@ class Converter < ::Prawn::Document
 
   def convert_document doc
     init_pdf doc
-    # data-uri doesn't apply to PDF, so explicitly disable (is there a better place?)
-    doc.attributes.delete 'data-uri'
     # set default value for pagenums if not otherwise set
     unless (doc.attribute_locked? 'pagenums') || ((doc.instance_variable_get :@attributes_modified).include? 'pagenums')
       doc.attributes['pagenums'] = ''
     end
+    if (idx_sect = doc.sections.find {|candidate| candidate.sectname == 'index' }) && idx_sect.numbered
+      idx_sect.numbered = false
+    end unless @capabilities[:special_sectnums]
     #assign_missing_section_ids doc
 
     # promote anonymous preface (defined using preamble block) to preface section
     # FIXME this should be done in core
-    if doc.doctype == 'book' && (blk_0 = doc.blocks[0]) && blk_0.context == :preamble &&
-        blk_0.title? && blk_0.blocks[0].style != 'abstract' && (blk_1 = doc.blocks[1]) && blk_1.context == :section
+    if doc.doctype == 'book' && (blk_0 = doc.blocks[0]) && blk_0.context == :preamble && blk_0.title? &&
+        !blk_0.title.nil_or_empty? && blk_0.blocks[0].style != 'abstract' && (blk_1 = doc.blocks[1]) && blk_1.context == :section
       preface = Section.new doc, blk_1.level, false, attributes: { 1 => 'preface', 'style' => 'preface' }
       preface.special = true
       preface.sectname = 'preface'
-      preface.title = doc.attr 'preface-title', 'Preface'
+      preface.title = blk_0.instance_variable_get :@title
       # QUESTION should ID be generated from raw or converted title? core is not clear about this
       preface.id = preface.generate_id
       preface.blocks.replace blk_0.blocks.map {|b| b.parent = preface; b }
@@ -172,62 +183,114 @@ class Converter < ::Prawn::Document
         set_page_margin next_page_margin
       end
       # TODO implement as a watermark (on top)
-      if @page_bg_image
-        # FIXME implement fitting and centering for SVG
-        # TODO implement image scaling (numeric value or "fit")
-        canvas { image @page_bg_image, position: :center, fit: [bounds.width, bounds.height] }
+      if (bg_image = @page_bg_image[page_side])
+        canvas { image bg_image[0], ({ position: :center, vposition: :center }.merge bg_image[1]) }
       elsif @page_bg_color && @page_bg_color != 'FFFFFF'
         fill_absolute_bounds @page_bg_color
       end
     end if respond_to? :on_page_create
 
-    layout_cover_page :front, doc
-    layout_title_page doc
+    layout_cover_page doc, :front
+    if (insert_title_page = doc.doctype == 'book' || (doc.attr? 'title-page'))
+      layout_title_page doc
+      # NOTE a new page will already be started if the cover image is a PDF
+      start_new_page unless page_is_empty?
+    else
+      # NOTE a new page will already be started if the cover image is a PDF
+      start_new_page unless page_is_empty?
+      body_start_page_number = page_number
+      if doc.header? && !doc.notitle
+        theme_font :heading, level: 1 do
+          layout_heading doc.doctitle, align: (@theme.heading_h1_align || :center).to_sym, level: 1
+        end
+        toc_start = @y
+      end
+    end
 
-    # NOTE a new page will already be started if the cover image is a PDF
-    start_new_page unless page_is_empty?
+    # NOTE font must be set before toc dry run to ensure dry run size is accurate
+    font @theme.base_font_family, size: @theme.base_font_size, style: @theme.base_font_style.to_sym
 
     num_toc_levels = (doc.attr 'toclevels', 2).to_i
     if (insert_toc = (doc.attr? 'toc') && doc.sections?)
       start_new_page if @ppbook && verso_page?
       toc_page_nums = page_number
-      dry_run { toc_page_nums = layout_toc doc, num_toc_levels, toc_page_nums }
+      toc_end = nil
+      dry_run do
+        toc_page_nums = layout_toc doc, num_toc_levels, toc_page_nums, 0, toc_start
+        move_down @theme.block_margin_bottom unless insert_title_page
+        toc_end = @y
+      end
       # NOTE reserve pages for the toc; leaves cursor on page after last page in toc
-      toc_page_nums.each { start_new_page }
+      if insert_title_page
+        toc_page_nums.each { start_new_page }
+      else
+        (toc_page_nums.first...toc_page_nums.last).each { start_new_page }
+        @y = toc_end
+      end
     end
 
     # FIXME only apply to book doctype once title and toc are moved to start page when using article doctype
     #start_new_page if @ppbook && verso_page?
     start_new_page if @media == 'prepress' && verso_page?
 
-    num_front_matter_pages = (@index.start_page_number = page_number) - 1
-    font @theme.base_font_family, size: @theme.base_font_size, style: @theme.base_font_style.to_sym
+    if insert_title_page
+      body_offset = (body_start_page_number = page_number) - 1
+      front_matter_sig = [@theme.running_content_start_at || 'body', @theme.page_numbering_start_at || 'body', insert_toc]
+      # NOTE start running content from title or toc, if specified (default: body)
+      num_front_matter_pages = {
+        ['title', 'title', true] => [0, 0],
+        ['title', 'title', false] => [0, 0],
+        ['title', 'toc', true] => [0, 1],
+        ['title', 'toc', false] => [0, 1],
+        ['title', 'body', true] => [0, body_offset],
+        ['title', 'body', false] => [0, 1],
+        ['toc', 'title', true] => [1, 0],
+        ['toc', 'title', false] => [1, 0],
+        ['toc', 'toc', true] => [1, 1],
+        ['toc', 'toc', false] => [1, 1],
+        ['toc', 'body', true] => [1, body_offset],
+        ['body', 'title', true] => [body_offset, 0],
+        ['body', 'title', false] => [1, 0],
+        ['body', 'toc', true] => [body_offset, 1],
+      }[front_matter_sig] || [body_offset, body_offset]
+    else
+      # Q: what if there's only a toc page, but not title?
+      num_front_matter_pages = [body_start_page_number - 1] * 2
+    end
+
+    @index.start_page_number = num_front_matter_pages[1] + 1
     doc.set_attr 'pdf-anchor', (doc_anchor = derive_anchor_from_id doc.id, 'top')
     add_dest_for_block doc, doc_anchor
+
+    convert_section generate_manname_section doc if doc.doctype == 'manpage' && (doc.attr? 'manpurpose')
+
     convert_content_for_block doc
+
+    # NOTE for a book, these are leftover footnotes; for an article this is everything
+    layout_footnotes doc
 
     # NOTE delete orphaned page (a page was created but there was no additional content)
     # QUESTION should we delete page if document is empty? (leaving no pages?)
     delete_page if page_is_empty? && page_count > 1
 
-    toc_page_nums = insert_toc ? (layout_toc doc, num_toc_levels, toc_page_nums.first, num_front_matter_pages) : []
+    toc_page_nums = insert_toc ? (layout_toc doc, num_toc_levels, toc_page_nums.first, num_front_matter_pages[1], toc_start) : []
 
-    if page_count > num_front_matter_pages
+    unless page_count < body_start_page_number
       unless doc.noheader || @theme.header_height.to_f.zero?
-        layout_running_content :header, doc, skip: num_front_matter_pages
+        layout_running_content :header, doc, skip: num_front_matter_pages, body_start_page_number: body_start_page_number
       end
       unless doc.nofooter || @theme.footer_height.to_f.zero?
-        layout_running_content :footer, doc, skip: num_front_matter_pages
+        layout_running_content :footer, doc, skip: num_front_matter_pages, body_start_page_number: body_start_page_number
       end
     end
 
-    add_outline doc, num_toc_levels, toc_page_nums, num_front_matter_pages
+    add_outline doc, (doc.attr 'outlinelevels', num_toc_levels).to_i, toc_page_nums, num_front_matter_pages[1]
     # TODO allow document (or theme) to override initial view magnification
     # NOTE add 1 to page height to force initial scroll to 0; a nil value also seems to work
     catalog.data[:OpenAction] = dest_fit_horizontally((page_height + 1), state.pages[0]) if state.pages.size > 0
     catalog.data[:ViewerPreferences] = { DisplayDocTitle: true }
 
-    layout_cover_page :back, doc
+    layout_cover_page doc, :back
     nil
   end
 
@@ -238,11 +301,12 @@ class Converter < ::Prawn::Document
 
   # TODO only allow method to be called once (or we need a reset)
   def init_pdf doc
-    @theme = theme = ThemeLoader.load_theme((doc.attr 'pdf-style'), (doc.attr 'pdf-stylesdir'))
-    pdf_opts = build_pdf_options doc, theme
-    # QUESTION should page options be preserved (otherwise, not readily available)
+    @allow_uri_read = doc.attr? 'allow-uri-read'
+    pdf_opts = build_pdf_options doc, (theme = load_theme doc)
+    # QUESTION should page options be preserved? (otherwise, not readily available)
     #@page_opts = { size: pdf_opts[:page_size], layout: pdf_opts[:page_layout] }
     ::Prawn::Document.instance_method(:initialize).bind(self).call pdf_opts
+    renderer.min_version PDFVersions[doc.attr 'pdf-version']
     @page_margin_by_side = { recto: page_margin, verso: page_margin }
     if (@media = doc.attr 'media', 'screen') == 'prepress'
       @ppbook = doc.doctype == 'book'
@@ -253,28 +317,50 @@ class Converter < ::Prawn::Document
       if (page_margin_inner = theme.page_margin_inner)
         page_margin_recto[3] = @page_margin_by_side[:verso][1] = page_margin_inner
       end
-      # NOTE prepare scratch document to use page margin from recto side
+      # NOTE prepare scratch document to use page margin from recto side (which has same width as verso side)
       set_page_margin page_margin_recto unless page_margin_recto == page_margin
     else
       @ppbook = false
     end
     # QUESTION should ThemeLoader register fonts?
     register_fonts theme.font_catalog, (doc.attr 'scripts', 'latin'), (doc.attr 'pdf-fontsdir', ThemeLoader::FontsDir)
-    if (bg_image = resolve_background_image doc, theme, 'page-background-image') && bg_image != 'none'
-      @page_bg_image = bg_image
+    if (bg_image = resolve_background_image doc, theme, 'page-background-image') && bg_image[0]
+      @page_bg_image = { verso: bg_image, recto: bg_image }
     else
-      @page_bg_image = nil
+      @page_bg_image = { verso: nil, recto: nil }
+    end
+    if (bg_image = resolve_background_image doc, theme, 'page-background-image-verso')
+      @page_bg_image[:verso] = bg_image[0] ? bg_image : nil
+    end
+    if (bg_image = resolve_background_image doc, theme, 'page-background-image-recto') && bg_image[0]
+      @page_bg_image[:recto] = bg_image[0] ? bg_image : nil
     end
     @page_bg_color = resolve_theme_color :page_background_color, 'FFFFFF'
     @fallback_fonts = [*theme.font_fallbacks]
     @font_color = theme.base_font_color
-    @base_align = (align = doc.attr 'text-alignment') && (TextAlignmentNames.include? align) ? align : theme.base_align
+    @base_align = (align = doc.attr 'text-align') && (TextAlignmentNames.include? align) ? align : theme.base_align
     @text_transform = nil
+    @list_numerals = []
+    @list_bullets = []
+    @footnotes = []
     @index = IndexCatalog.new
     # NOTE we have to init Pdfmark class here while we have reference to the doc
     @pdfmark = (doc.attr? 'pdfmark') ? (Pdfmark.new doc) : nil
     init_scratch_prototype
     self
+  end
+
+  def load_theme doc
+    @theme ||= begin
+      if (theme = doc.options[:pdf_theme])
+        @themesdir = theme.__dir__ || (doc.attr 'pdf-themesdir') || (doc.attr 'pdf-stylesdir')
+      else
+        theme_name = (doc.attr 'pdf-theme') || (doc.attr 'pdf-style')
+        theme = ThemeLoader.load_theme theme_name, ((doc.attr 'pdf-themesdir') || (doc.attr 'pdf-stylesdir'))
+        @themesdir = theme.__dir__
+      end
+      theme
+    end
   end
 
   def build_pdf_options doc, theme
@@ -303,19 +389,19 @@ class Converter < ::Prawn::Document
       page_margin = nil
     end
 
-    page_size = if (doc.attr? 'pdf-page-size') && (m = PageSizeRx.match(doc.attr 'pdf-page-size'))
+    if (doc.attr? 'pdf-page-size') && PageSizeRx =~ (doc.attr 'pdf-page-size')
       # e.g, [8.5in, 11in]
-      if m[1]
-        [m[1], m[2]]
+      if $1
+        page_size = [$1, $2]
       # e.g, 8.5in x 11in
-      elsif m[3]
-        [m[3], m[4]]
+      elsif $3
+        page_size = [$3, $4]
       # e.g, A4
       else
-        m[0]
+        page_size = $&
       end
     else
-      theme.page_size
+      page_size = theme.page_size
     end
 
     page_size = case page_size
@@ -332,9 +418,9 @@ class Converter < ::Prawn::Document
         if ::Numeric === dim
           # dimension cannot be less than 0
           dim > 0 ? dim : break
-        elsif ::String === dim && (m = (MeasurementPartsRx.match dim))
+        elsif ::String === dim && MeasurementPartsRx =~ dim
           # NOTE truncate to max precision retained by PDF::Core
-          (to_pt m[1].to_f, m[2]).truncate_to_precision 4
+          (to_pt $1.to_f, $2).truncate 4
         else
           break
         end
@@ -358,7 +444,7 @@ class Converter < ::Prawn::Document
     }
   end
 
-  # FIXME PdfMarks should use the PDF info result
+  # FIXME Pdfmark should use the PDF info result
   def build_pdf_info doc
     info = {}
     # FIXME use sanitize: :plain_text once available
@@ -375,7 +461,7 @@ class Converter < ::Prawn::Document
     if (doc.attr? 'publisher')
       info[:Producer] = (doc.attr 'publisher').as_pdf
     end
-    info[:Creator] = %(Asciidoctor PDF #{::Asciidoctor::Pdf::VERSION}, based on Prawn #{::Prawn::VERSION}).as_pdf
+    info[:Creator] = %(Asciidoctor PDF #{::Asciidoctor::PDF::VERSION}, based on Prawn #{::Prawn::VERSION}).as_pdf
     info[:Producer] ||= (info[:Author] || info[:Creator])
     unless doc.attr? 'reproducible'
       # NOTE since we don't track the creation date of the input file, we map the ModDate header to the last modified
@@ -393,10 +479,10 @@ class Converter < ::Prawn::Document
       return convert_abstract sect
     end
 
+    type = nil
     theme_font :heading, level: (hlevel = sect.level + 1) do
       title = sect.numbered_title formal: true
       align = (@theme[%(heading_h#{hlevel}_align)] || @theme.heading_align || @base_align).to_sym
-      type = nil
       if sect.part_or_chapter?
         if sect.chapter?
           type = :chapter
@@ -416,23 +502,40 @@ class Converter < ::Prawn::Document
       sect.set_attr 'pdf-anchor', (sect_anchor = derive_anchor_from_id sect.id, %(#{start_pgnum}-#{y.ceil}))
       add_dest_for_block sect, sect_anchor
       if type == :part
-        layout_part_title sect, title, align: align
+        layout_part_title sect, title, align: align, level: hlevel
       elsif type == :chapter
-        layout_chapter_title sect, title, align: align
+        layout_chapter_title sect, title, align: align, level: hlevel
       else
-        layout_heading title, align: align
+        layout_heading title, align: align, level: hlevel
       end
     end
 
     sect.sectname == 'index' ? (convert_index_section sect) : (convert_content_for_block sect)
+    layout_footnotes sect if type == :chapter
     sect.set_attr 'pdf-page-end', page_number
+  end
+
+  # QUESTION if a footnote ref appears in a separate chapter, should the footnote def be duplicated?
+  def layout_footnotes node
+    return if (fns = (doc = node.document).footnotes - @footnotes).empty?
+    theme_margin :footnotes, :top
+    theme_font :footnotes do
+      # FIXME layout_caption resets the theme font for footnotes
+      (title = doc.attr 'footnotes-title') && (layout_caption title)
+      item_spacing = @theme.footnotes_item_spacing || 0
+      fns.each do |fn|
+        layout_prose %(<a name="_footnotedef_#{index = fn.index}">#{DummyText}</a>[<a anchor="_footnoteref_#{index}">#{index}</a>] #{fn.text}), margin_bottom: item_spacing
+      end
+      @footnotes += fns
+    end
+    nil
   end
 
   def convert_floating_title node
     add_dest_for_block node if node.id
     # QUESTION should we decouple styles from section titles?
     theme_font :heading, level: (hlevel = node.level + 1) do
-      layout_heading node.title, align: (@theme[%(heading_h#{hlevel}_align)] || @theme.heading_align || @base_align).to_sym
+      layout_heading node.title, align: (@theme[%(heading_h#{hlevel}_align)] || @theme.heading_align || @base_align).to_sym, level: hlevel
     end
   end
 
@@ -446,6 +549,9 @@ class Converter < ::Prawn::Document
       end
       theme_font :abstract do
         prose_opts = { line_height: @theme.abstract_line_height, align: (@theme.abstract_align || @base_align).to_sym }
+        if (text_indent = @theme.prose_text_indent)
+          prose_opts[:indent_paragraphs] = text_indent
+        end
         # FIXME control more first_line_options using theme
         if (line1_font_style = @theme.abstract_first_line_font_style) && line1_font_style.to_sym != font_style
           prose_opts[:first_line_options] = { styles: [font_style, line1_font_style.to_sym] }
@@ -474,45 +580,44 @@ class Converter < ::Prawn::Document
 
   def convert_preamble node
     # TODO find_by needs to support a depth argument
-    if (first_p = (node.find_by context: :paragraph)[0]) && first_p.parent == node
+    # FIXME core should not be promoting paragraph to preamble if there are no sections
+    if (first_p = (node.find_by context: :paragraph)[0]) && first_p.parent == node && node.document.sections?
       first_p.add_role 'lead'
     end
     convert_content_for_block node
   end
 
-  # TODO add prose around image logic (use role to add special logic for headshot)
   def convert_paragraph node
     add_dest_for_block node if node.id
-    is_lead = false
-    prose_opts = {}
-    node.roles.each do |role|
-      case role
-      when 'text-left'
-        prose_opts[:align] = :left
-      when 'text-right'
-        prose_opts[:align] = :right
-      when 'text-justify'
-        prose_opts[:align] = :justify
-      when 'text-center'
-        prose_opts[:align] = :center
-      when 'lead'
-        is_lead = true
-      #when 'signature'
-      #  prose_opts[:size] = @theme.base_font_size_small
-      end
+    prose_opts = { margin_bottom: 0 }
+    lead = (roles = node.roles).include? 'lead'
+    if (align = resolve_alignment_from_role roles)
+      prose_opts[:align] = align
+    end
+
+    if (text_indent = @theme.prose_text_indent)
+      prose_opts[:indent_paragraphs] = text_indent
     end
 
     # TODO check if we're within one line of the bottom of the page
     # and advance to the next page if so (similar to logic for section titles)
     layout_caption node.title if node.title?
 
-    if is_lead
+    if lead
       theme_font :lead do
         layout_prose node.content, prose_opts
       end
     else
       layout_prose node.content, prose_opts
     end
+
+    if (margin_inner_val = @theme.prose_margin_inner) &&
+        (next_block = (siblings = node.parent.blocks)[(siblings.index node) + 1]) && next_block.context == :paragraph
+      margin_bottom_val = margin_inner_val
+    else
+      margin_bottom_val = @theme.prose_margin_bottom
+    end
+    margin_bottom margin_bottom_val
   end
 
   def convert_admonition node
@@ -527,7 +632,10 @@ class Converter < ::Prawn::Document
     if (label_min_width = @theme.admonition_label_min_width)
       label_min_width = label_min_width.to_f
     end
-    icons = (node.document.attr? 'icons') ? (node.document.attr 'icons') : false
+    icons = ((doc = node.document).attr? 'icons') ? (doc.attr 'icons') : false
+    if (data_uri_enabled = doc.attr? 'data-uri')
+      doc.remove_attr 'data-uri'
+    end
     if icons == 'font' && !(node.attr? 'icon', nil, false)
       icon_data = admonition_icon_data(label_text = type.to_sym)
       label_width = label_min_width ? label_min_width : (icon_data[:size] * 1.5)
@@ -539,12 +647,12 @@ class Converter < ::Prawn::Document
     else
       if icons
         icons = false
-        warn %(asciidoctor: WARNING: admonition icon image not found or not readable: #{icon_path}) unless scratch?
+        logger.warn %(admonition icon image not found or not readable: #{icon_path}) unless scratch?
       end
       label_text = node.caption
       theme_font :admonition_label do
         theme_font %(admonition_label_#{type}) do
-          if (transform = @text_transform) && transform != 'none'
+          if (transform = @text_transform)
             label_text = transform_text label_text, transform
           end
           label_width = rendered_width_of_string label_text
@@ -552,6 +660,7 @@ class Converter < ::Prawn::Document
         end
       end
     end
+    doc.set_attr 'data-uri', '' if data_uri_enabled
     unless ::Array === (cpad = @theme.admonition_padding)
       cpad = ::Array.new 4, cpad
     end
@@ -563,6 +672,7 @@ class Converter < ::Prawn::Document
     shift_top = shift_base / 3.0
     shift_bottom = (shift_base * 2) / 3.0
     keep_together do |box_height = nil|
+      push_scratch doc if scratch?
       pad_box [0, cpad[1], 0, lpad[3]] do
         if box_height
           if (rule_color = @theme.admonition_column_rule_color) &&
@@ -570,7 +680,7 @@ class Converter < ::Prawn::Document
             float do
               bounding_box [0, cursor], width: label_width + lpad[1], height: box_height do
                 stroke_vertical_rule rule_color,
-                    at: bounds.width,
+                    at: bounds.right,
                     line_style: (@theme.admonition_column_rule_style || :solid).to_sym,
                     line_width: rule_width
               end
@@ -594,15 +704,15 @@ class Converter < ::Prawn::Document
                     color: icon_data[:stroke_color],
                     size: icon_size
               elsif icons
-                if icon_path.end_with? '.svg'
+                if (::Asciidoctor::Image.format icon_path) == 'svg'
                   begin
-                    svg_obj = ::Prawn::Svg::Interface.new ::IO.read(icon_path), self,
-	                    position: label_align,
+                    svg_obj = ::Prawn::SVG::Interface.new ::File.read(icon_path), self,
+	                      position: label_align,
                         vposition: label_valign,
                         width: label_width,
                         height: box_height,
                         fallback_font_name: default_svg_font,
-                        enable_web_requests: (node.document.attr? 'allow-uri-read'),
+                        enable_web_requests: allow_uri_read,
                         enable_file_requests_with_root: (::File.dirname icon_path)
                     if (icon_height = (svg_size = svg_obj.document.sizing).output_height) > box_height
                       icon_width = (svg_obj.resize height: (icon_height = box_height)).output_width
@@ -610,8 +720,8 @@ class Converter < ::Prawn::Document
                       icon_width = svg_size.output_width
                     end
                     svg_obj.draw
-                  rescue => e
-                    warn %(asciidoctor: WARNING: could not embed admonition icon image: #{icon_path}; #{e.message})
+                  rescue
+                    logger.warn %(could not embed admonition icon image: #{icon_path}; #{$!.message})
                   end
                 else
                   begin
@@ -624,9 +734,9 @@ class Converter < ::Prawn::Document
                       icon_height = box_height
                     end
                     embed_image image_obj, image_info, width: icon_width, position: label_align, vposition: label_valign
-                  rescue => e
+                  rescue
                     # QUESTION should we show the label in this case?
-                    warn %(asciidoctor: WARNING: could not embed admonition icon image: #{icon_path}; #{e.message})
+                    logger.warn %(could not embed admonition icon image: #{icon_path}; #{$!.message})
                   end
                 end
               else
@@ -664,6 +774,7 @@ class Converter < ::Prawn::Document
           move_up shift_bottom unless at_page_top?
         end
       end
+      pop_scratch doc if scratch?
     end
     theme_margin :block, :bottom
   end
@@ -672,6 +783,7 @@ class Converter < ::Prawn::Document
     add_dest_for_block node if node.id
     theme_margin :block, :top
     keep_together do |box_height = nil|
+      push_scratch node.document if scratch?
       caption_height = node.title? ? (layout_caption node) : 0
       if box_height
         float do
@@ -685,6 +797,7 @@ class Converter < ::Prawn::Document
           convert_content_for_block node
         end
       end
+      pop_scratch node.document if scratch?
     end
     theme_margin :block, :bottom
   end
@@ -709,6 +822,7 @@ class Converter < ::Prawn::Document
     b_width = @theme.blockquote_border_width
     b_color = @theme.blockquote_border_color
     keep_together do |box_height = nil|
+      push_scratch node.document if scratch?
       start_page_number = page_number
       start_cursor = cursor
       caption_height = node.title? ? (layout_caption node) : 0
@@ -759,6 +873,7 @@ class Converter < ::Prawn::Document
           end unless b_height == 0
         end
       end
+      pop_scratch node.document if scratch?
     end
     theme_margin :block, :bottom
   end
@@ -770,6 +885,7 @@ class Converter < ::Prawn::Document
     add_dest_for_block node if node.id
     theme_margin :block, :top
     keep_together do |box_height = nil|
+      push_scratch node.document if scratch?
       if box_height
         # FIXME due to the calculation error logged in #789, we must advance page even when content is split across pages
         advance_page if box_height > cursor && !at_page_top?
@@ -826,6 +942,7 @@ class Converter < ::Prawn::Document
           convert_content_for_block node
         end
       end
+      pop_scratch node.document if scratch?
     end
     theme_margin :block, :bottom
   end
@@ -844,18 +961,18 @@ class Converter < ::Prawn::Document
       end
     end
     add_dest_for_block node if node.id
-    @list_numbers ||= []
+    @list_numerals ||= []
     # FIXME move \u2460 to constant (or theme setting)
     # \u2460 = circled one, \u24f5 = double circled one, \u278b = negative circled one
-    @list_numbers << %(\u2460)
+    @list_numerals << %(\u2460)
     #stroke_horizontal_rule @theme.caption_border_bottom_color
     line_metrics = calc_line_metrics @theme.base_line_height
     node.items.each_with_index do |item, idx|
       # FIXME extract to an ensure_space (or similar) method; simplify
-      advance_page if cursor < (line_metrics.height + line_metrics.leading + line_metrics.padding_top)
+      advance_page if cursor < (line_metrics.height + line_metrics.leading + line_metrics.padding_top) + 1
       convert_colist_item item
     end
-    @list_numbers.pop
+    @list_numerals.pop
     # correct bottom margin of last item
     list_margin_bottom = @theme.prose_margin_bottom
     margin_bottom list_margin_bottom - @theme.outline_list_item_spacing
@@ -867,7 +984,7 @@ class Converter < ::Prawn::Document
       marker_width = rendered_width_of_string %(#{conum_glyph 1}x)
       float do
         bounding_box [0, cursor], width: marker_width do
-          @list_numbers << (index = @list_numbers.pop).next
+          @list_numerals << (index = @list_numerals.pop).next
           theme_font :conum do
             layout_prose index, align: :center, line_height: @theme.conum_line_height, inline_format: false, margin: 0
           end
@@ -876,39 +993,46 @@ class Converter < ::Prawn::Document
     end
 
     indent marker_width do
-      convert_content_for_list_item node, margin_bottom: @theme.outline_list_item_spacing
+      convert_content_for_list_item node, :colist, margin_bottom: @theme.outline_list_item_spacing
     end
   end
 
   def convert_dlist node
     add_dest_for_block node if node.id
 
-    # TODO check if we're within one line of the bottom of the page
-    # and advance to the next page if so (similar to logic for section titles)
-    layout_caption node.title if node.title?
+    case node.style
+    when 'qanda'
+      (@list_numerals ||= []) << '1'
+      convert_outline_list node
+      @list_numerals.pop
+    else
+      # TODO check if we're within one line of the bottom of the page
+      # and advance to the next page if so (similar to logic for section titles)
+      layout_caption node.title if node.title?
 
-    node.items.each do |terms, desc|
-      terms = [*terms]
-      # NOTE don't orphan the terms, allow for at least one line of content
-      # FIXME extract ensure_space (or similar) method
-      advance_page if cursor < @theme.base_line_height_length * (terms.size + 1)
-      terms.each do |term|
-        # FIXME layout_prose should pass style downward when parsing formatted text
-        #layout_prose term.text, style: @theme.description_list_term_font_style.to_sym, margin_top: 0, margin_bottom: @theme.description_list_term_spacing, align: :left
-        term_text = term.text
-        case @theme.description_list_term_font_style.to_sym
-        when :bold
-          term_text = %(<strong>#{term_text}</strong>)
-        when :italic
-          term_text = %(<em>#{term_text}</em>)
-        when :bold_italic
-          term_text = %(<strong><em>#{term_text}</em></strong>)
+      node.items.each do |terms, desc|
+        terms = [*terms]
+        # NOTE don't orphan the terms, allow for at least one line of content
+        # FIXME extract ensure_space (or similar) method
+        advance_page if cursor < @theme.base_line_height_length * (terms.size + 1)
+        terms.each do |term|
+          # FIXME layout_prose should pass style downward when parsing formatted text
+          #layout_prose term.text, style: @theme.description_list_term_font_style.to_sym, margin_top: 0, margin_bottom: @theme.description_list_term_spacing, align: :left
+          term_text = term.text
+          case @theme.description_list_term_font_style.to_sym
+          when :bold
+            term_text = %(<strong>#{term_text}</strong>)
+          when :italic
+            term_text = %(<em>#{term_text}</em>)
+          when :bold_italic
+            term_text = %(<strong><em>#{term_text}</em></strong>)
+          end
+          layout_prose term_text, margin_top: 0, margin_bottom: @theme.description_list_term_spacing, align: :left
         end
-        layout_prose term_text, margin_top: 0, margin_bottom: @theme.description_list_term_spacing, align: :left
-      end
-      if desc
-        indent @theme.description_list_description_indent do
-          convert_content_for_list_item desc
+        if desc
+          indent @theme.description_list_description_indent do
+            convert_content_for_list_item desc, :dlist_desc
+          end
         end
       end
     end
@@ -916,11 +1040,11 @@ class Converter < ::Prawn::Document
 
   def convert_olist node
     add_dest_for_block node if node.id
-    @list_numbers ||= []
-    # TODO move list_number resolve to a method
-    list_number = case node.style
+    @list_numerals ||= []
+    # TODO move list_numeral resolve to a method
+    list_numeral = case node.style
     when 'arabic'
-      '1'
+      1
     when 'decimal'
       '01'
     when 'loweralpha'
@@ -933,16 +1057,24 @@ class Converter < ::Prawn::Document
       RomanNumeral.new 'I'
     when 'lowergreek'
       LowercaseGreekA
+    when 'unstyled', 'unnumbered', 'no-bullet'
+      nil
+    when 'none'
+      ''
     else
-      '1'
+      1
     end
-    # TODO support start values < 1 (issue #498)
-    if (start = ((node.attr 'start', nil, false) || ((node.option? 'reversed') ? node.items.size : 1)).to_i) > 1
-      (start - 1).times { list_number = list_number.next  }
+    if list_numeral && list_numeral != '' &&
+        (start = (node.attr 'start', nil, false) || ((node.option? 'reversed') ? node.items.size : nil))
+      if (start = start.to_i) > 1
+        (start - 1).times { list_numeral = list_numeral.next }
+      elsif start < 1 && !(::String === list_numeral)
+        (start - 1).abs.times { list_numeral = list_numeral.pred }
+      end
     end
-    @list_numbers << list_number
+    @list_numerals << list_numeral
     convert_outline_list node
-    @list_numbers.pop
+    @list_numerals.pop
   end
 
   def convert_ulist node
@@ -959,9 +1091,9 @@ class Converter < ::Prawn::Document
           nil
         else
           if Bullets.key?(candidate = style.to_sym)
-            candidate 
+            candidate
           else
-            warn %(asciidoctor: WARNING: unknown unordered list style: #{candidate})
+            logger.warn %(unknown unordered list style: #{candidate})
             :disc
           end
         end
@@ -975,7 +1107,7 @@ class Converter < ::Prawn::Document
           :square
         end
       end
-      @list_bullets << Bullets[bullet_type]
+      @list_bullets << bullet_type
     end
     convert_outline_list node
     @list_bullets.pop
@@ -986,17 +1118,27 @@ class Converter < ::Prawn::Document
     # and advance to the next page if so (similar to logic for section titles)
     layout_caption node.title if node.title?
 
+    opts = {}
+    if (align = resolve_alignment_from_role node.roles)
+      opts[:align] = align
+    elsif node.style == 'bibliography'
+      opts[:align] = :left
+    elsif (align = @theme.outline_list_text_align)
+      # NOTE theme setting only affects alignment of list text (not nested blocks)
+      opts[:align] = align.to_sym
+    end
+
     line_metrics = calc_line_metrics @theme.base_line_height
     complex = false
     # ...or if we want to give all items in the list the same treatment
     #complex = node.items.find(&:complex?) ? true : false
-    if node.context == :ulist && !@list_bullets[-1]
+    if (node.context == :ulist && !@list_bullets[-1]) || (node.context == :olist && !@list_numerals[-1])
       if node.style == 'unstyled'
         # unstyled takes away all indentation
         list_indent = 0
       elsif (list_indent = @theme.outline_list_indent) > 0
         # no-bullet aligns text with left-hand side of bullet position (as though there's no bullet)
-        list_indent = [list_indent - (rendered_width_of_string %(\u2022x)), 0].max
+        list_indent = [list_indent - (rendered_width_of_string %(#{node.context == :ulist ? "\u2022" : '1.'}x)), 0].max
       end
     else
       list_indent = @theme.outline_list_indent
@@ -1005,7 +1147,7 @@ class Converter < ::Prawn::Document
       node.items.each do |item|
         # FIXME extract to an ensure_space (or similar) method; simplify
         advance_page if cursor < (line_metrics.height + line_metrics.leading + line_metrics.padding_top)
-        convert_outline_list_item item, item.complex?
+        convert_outline_list_item item, node, opts
       end
     end
     # NOTE Children will provide the necessary bottom margin if last item is complex.
@@ -1017,58 +1159,96 @@ class Converter < ::Prawn::Document
     end
   end
 
-  def convert_outline_list_item node, complex = false
+  def convert_outline_list_item node, list, opts = {}
     # TODO move this to a draw_bullet (or draw_marker) method
-    case (list_type = node.parent.context)
+    marker_style = {}
+    marker_style[:font_color] = @theme.outline_list_marker_font_color || @font_color
+    marker_style[:font_family] = font_family
+    marker_style[:font_size] = font_size
+    marker_style[:line_height] = @theme.base_line_height
+    case (list_type = list.context)
     when :ulist
-      marker = @list_bullets[-1]
-      if marker == :checkbox
-        if node.attr? 'checkbox', nil, false
-          marker = BallotBox[(node.attr? 'checked', nil, false) ? :checked : :unchecked]
+      complex = node.complex?
+      if (marker_type = @list_bullets[-1])
+        if marker_type == :checkbox
+          # QUESTION should we remove marker indent if not a checkbox?
+          if node.attr? 'checkbox', nil, false
+            marker_type = (node.attr? 'checked', nil, false) ? :checked : :unchecked
+            marker = @theme[%(ulist_marker_#{marker_type}_content)] || BallotBox[marker_type]
+          end
         else
-          # QUESTION should we remove marker indent in this case?
-          marker = nil
+          marker = @theme[%(ulist_marker_#{marker_type}_content)] || Bullets[marker_type]
         end
+        [:font_color, :font_family, :font_size, :line_height].each do |prop|
+          marker_style[prop] = @theme[%(ulist_marker_#{marker_type}_#{prop})] || @theme[%(ulist_marker_#{prop})] || marker_style[prop]
+        end if marker
       end
     when :olist
-      dir = (node.parent.option? 'reversed') ? :pred : :next
-      @list_numbers << ((index = @list_numbers.pop).public_send dir)
+      complex = node.complex?
+      if (index = @list_numerals.pop)
+        if index == ''
+          marker = ''
+        else
+          marker = %(#{index}.)
+          dir = (node.parent.option? 'reversed') ? :pred : :next
+          @list_numerals << (index = index.public_send dir)
+        end
+      end
+    when :dlist
+      # NOTE list.style is 'qanda'
+      complex = node[1] && node[1].complex?
+      @list_numerals << (index = @list_numerals.pop).next
       marker = %(#{index}.)
     else
-      warn %(asciidoctor: WARNING: unknown list type #{list_type.inspect})
-      marker = Bullets[:disc]
+      complex = node.complex?
+      logger.warn %(unknown list type #{list_type.inspect})
+      marker = @theme.ulist_marker_disc_content || Bullets[:disc]
     end
 
     if marker
-      marker_width = rendered_width_of_string marker
-      start_position = -marker_width + -(rendered_width_of_char 'x')
-      float do
-        flow_bounding_box start_position, width: marker_width do
-          layout_prose marker,
-            align: :right,
-            color: (@theme.outline_list_marker_font_color || @font_color),
-            normalize: false,
-            inline_format: false,
-            margin: 0,
-            character_spacing: -0.5,
-            single_line: true
+      if marker_style[:font_family] == 'fa'
+        logger.info { 'deprecated fa icon set found in theme; use fas, far, or fab instead' }
+        marker_style[:font_family] = FontAwesomeIconSets.find {|candidate| (icon_font_data candidate).yaml[candidate].value? marker } || 'fas'
+      end
+      marker_gap = rendered_width_of_char 'x'
+      font marker_style[:font_family], size: marker_style[:font_size] do
+        marker_width = rendered_width_of_string marker
+        start_position = -marker_width + -marker_gap
+        float do
+          flow_bounding_box start_position, width: marker_width do
+            layout_prose marker,
+              align: :right,
+              character_spacing: -0.5,
+              color: marker_style[:font_color],
+              inline_format: false,
+              line_height: marker_style[:line_height],
+              margin: 0,
+              normalize: false,
+              single_line: true
+          end
         end
       end
     end
 
     if complex
-      convert_content_for_list_item node
+      convert_content_for_list_item node, list_type, opts
     else
-      convert_content_for_list_item node, margin_bottom: @theme.outline_list_item_spacing
+      convert_content_for_list_item node, list_type, (opts.merge margin_bottom: @theme.outline_list_item_spacing)
     end
   end
 
-  def convert_content_for_list_item node, opts = {}
-    if node.text?
-      opts[:align] = :left if node.parent.style == 'bibliography'
-      layout_prose node.text, opts
+  def convert_content_for_list_item node, list_type, opts = {}
+    if list_type == :dlist # qanda
+      terms, desc = node
+      [*terms].each {|term| layout_prose %(<em>#{term.text}</em>), opts }
+      if desc
+        layout_prose desc.text, opts if desc.text?
+        convert_content_for_block desc
+      end
+    else
+      layout_prose node.text, opts if node.text?
+      convert_content_for_block node
     end
-    convert_content_for_block node
   end
 
   def convert_image node, opts = {}
@@ -1076,20 +1256,26 @@ class Converter < ::Prawn::Document
     target, image_format = node.target_and_format
 
     if image_format == 'gif' && !(defined? ::GMagick::Image)
-      warn %(asciidoctor: WARNING: GIF image format not supported. Install the prawn-gmagick gem or convert #{target} to PNG.) unless scratch?
-      image_path = false
+      logger.warn %(GIF image format not supported. Install the prawn-gmagick gem or convert #{target} to PNG.) unless scratch?
+      image_path = nil
     elsif ::Base64 === target
       image_path = target
-    elsif (image_path = resolve_image_path node, target, (opts.fetch :relative_to_imagesdir, true), image_format) &&
-        (::File.readable? image_path)
-      # NOTE import_page automatically advances to next page afterwards
-      # QUESTION should we add destination to top of imported page?
-      return import_page image_path, replace: page_is_empty? if image_format == 'pdf'
-    else
-      warn %(asciidoctor: WARNING: image to embed not found or not readable: #{image_path || target}) unless scratch?
+    elsif (image_path = resolve_image_path node, target, (opts.fetch :relative_to_imagesdir, true), image_format)
+      if ::File.readable? image_path
+        # NOTE import_page automatically advances to next page afterwards
+        # QUESTION should we add destination to top of imported page?
+        return import_page image_path, replace: page_is_empty? if image_format == 'pdf'
+      elsif image_format == 'pdf'
+        logger.warn %(pdf to insert not found or not readable: #{image_path}) unless scratch?
+        # QUESTION should we use alt text in this case?
+        return
+      else
+        logger.warn %(image to embed not found or not readable: #{image_path}) unless scratch?
+        image_path = nil
+      end
+    elsif image_format == 'pdf'
       # QUESTION should we use alt text in this case?
-      return if image_format == 'pdf'
-      image_path = false
+      return
     end
 
     theme_margin :block, :top unless (pinned = opts[:pinned])
@@ -1105,7 +1291,7 @@ class Converter < ::Prawn::Document
     end if node.title?
 
     # TODO support cover (aka canvas) image layout using "canvas" (or "cover") role
-    width = resolve_explicit_width node.attributes, (available_w = bounds.width), support_vw: true, use_fallback: true
+    width = resolve_explicit_width node.attributes, (available_w = bounds.width), support_vw: true, use_fallback: true, constrain_to_bounds: true
     # TODO add `to_pt page_width` method to ViewportWidth type
     width = (width.to_f / 100) * page_width if ViewportWidth === width
 
@@ -1119,15 +1305,14 @@ class Converter < ::Prawn::Document
             svg_data = ::Base64.decode64 image_path
             file_request_root = false
           else
-            svg_data = ::IO.read image_path
+            svg_data = ::File.read image_path
             file_request_root = ::File.dirname image_path
           end
-          svg_obj = ::Prawn::Svg::Interface.new svg_data, self,
+          svg_obj = ::Prawn::SVG::Interface.new svg_data, self,
               position: alignment,
               width: width,
               fallback_font_name: default_svg_font,
-              enable_web_requests: (node.document.attr? 'allow-uri-read'),
-              # TODO enforce jail in safe mode
+              enable_web_requests: allow_uri_read,
               enable_file_requests_with_root: file_request_root
           rendered_w = (svg_size = svg_obj.document.sizing).output_width
           if !width && (svg_obj.document.root.attributes.key? 'width')
@@ -1194,15 +1379,15 @@ class Converter < ::Prawn::Document
       end
       layout_caption node, side: :bottom if node.title?
       theme_margin :block, :bottom unless pinned
-    rescue => e
-      on_image_error :exception, node, target, (opts.merge message: %(asciidoctor: WARNING: could not embed image: #{image_path}; #{e.message}))
+    rescue
+      on_image_error :exception, node, target, (opts.merge message: %(could not embed image: #{image_path}; #{$!.message}))
     end
   ensure
     unlink_tmp_file image_path if image_path
   end
 
   def on_image_error reason, node, target, opts = {}
-    warn opts[:message] if opts.key? :message
+    logger.warn opts[:message] if opts.key? :message
     alt_text = (link = node.attr 'link', nil, false) ?
         %(<a href="#{link}">[#{node.attr 'alt'}]</a> | <em>#{target}</em>) :
         %([#{node.attr 'alt'}] | <em>#{target}</em>)
@@ -1220,8 +1405,7 @@ class Converter < ::Prawn::Document
     add_dest_for_block node if node.id
     theme_margin :block, :top
     audio_path = node.media_uri(node.attr 'target')
-    play_symbol = (node.document.attr? 'icons', 'font') ?
-        %(<font name="fa">#{::Prawn::Icon::FontData.load(self, 'fa').unicode 'play'}</font>) : RightPointer
+    play_symbol = (node.document.attr? 'icons', 'font') ? %(<font name="fas">#{(icon_font_data 'fas').unicode 'play'}</font>) : RightPointer
     layout_prose %(#{play_symbol}#{NoBreakSpace}<a href="#{audio_path}">#{audio_path}</a> <em>(audio)</em>), normalize: false, margin: 0, single_line: true
     layout_caption node, side: :bottom if node.title?
     theme_margin :block, :bottom
@@ -1232,21 +1416,19 @@ class Converter < ::Prawn::Document
     when 'youtube'
       video_path = %(https://www.youtube.com/watch?v=#{video_id = node.attr 'target'})
       # see http://stackoverflow.com/questions/2068344/how-do-i-get-a-youtube-video-thumbnail-from-the-youtube-api
-      poster = (node.document.attr? 'allow-uri-read') ? %(https://img.youtube.com/vi/#{video_id}/maxresdefault.jpg) : nil
+      poster = allow_uri_read ? %(https://img.youtube.com/vi/#{video_id}/maxresdefault.jpg) : nil
       type = 'YouTube video'
     when 'vimeo'
       video_path = %(https://vimeo.com/#{video_id = node.attr 'target'})
-      if node.document.attr? 'allow-uri-read'
+      if allow_uri_read
         if node.document.attr? 'cache-uri'
           Helpers.require_library 'open-uri/cached', 'open-uri-cached' unless defined? ::OpenURI::Cache
         else
           ::OpenURI
         end
         poster = open(%(http://vimeo.com/api/v2/video/#{video_id}.xml), 'r') do |f|
-          (/<thumbnail_large>(.*?)<\/thumbnail_large>/.match f.read)[1]
+          /<thumbnail_large>(.*?)<\/thumbnail_large>/ =~ f.read && $1
         end
-      else
-        poster = nil
       end
       type = 'Vimeo video'
     else
@@ -1257,8 +1439,7 @@ class Converter < ::Prawn::Document
     if poster.nil_or_empty?
       add_dest_for_block node if node.id
       theme_margin :block, :top
-      play_symbol = (node.document.attr? 'icons', 'font') ?
-          %(<font name="fa">#{::Prawn::Icon::FontData.load(self, 'fa').unicode 'play'}</font>) : RightPointer
+      play_symbol = (node.document.attr? 'icons', 'font') ? %(<font name="fas">#{(icon_font_data 'fas').unicode 'play'}</font>) : RightPointer
       layout_prose %(#{play_symbol}#{NoBreakSpace}<a href="#{video_path}">#{video_path}</a> <em>(#{type})</em>), normalize: false, margin: 0, single_line: true
       layout_caption node, side: :bottom if node.title?
       theme_margin :block, :bottom
@@ -1280,13 +1461,27 @@ class Converter < ::Prawn::Document
 
     # HACK disable built-in syntax highlighter; must be done before calling node.content!
     if node.style == 'source' && node.attributes['language'] &&
-        (highlighter = node.document.attributes['source-highlighter']) &&
-        (SourceHighlighters.include? highlighter)
+        (highlighter = node.document.attributes['source-highlighter']) && (SourceHighlighters.include? highlighter) &&
+        (@capabilities[:syntax_highlighter] ? node.document.syntax_highlighter.highlight? : true)
+      case highlighter
+      when 'coderay'
+        unless defined? ::Asciidoctor::Prawn::CodeRayEncoder
+          highlighter = nil if (Helpers.require_library CodeRayRequirePath, 'coderay', :warn).nil?
+        end
+      when 'pygments'
+        unless defined? ::Pygments
+          highlighter = nil if (Helpers.require_library 'pygments', 'pygments.rb', :warn).nil?
+        end
+      when 'rouge'
+        unless defined? ::Rouge::Formatters::Prawn
+          highlighter = nil if (Helpers.require_library RougeRequirePath, 'rouge', :warn).nil?
+        end
+      end
       prev_subs = (subs = node.subs).dup
-      # NOTE the highlight sub is only set for coderay and pygments atm
+      # NOTE the highlight sub is only set for coderay, rouge, and pygments atm
       highlight_idx = subs.index :highlight
       # NOTE scratch? here only applies if listing block is nested inside another block
-      if scratch?
+      if !highlighter || scratch?
         highlighter = nil
         if highlight_idx
           # switch the :highlight sub back to :specialcharacters
@@ -1315,7 +1510,6 @@ class Converter < ::Prawn::Document
 
     source_chunks = case highlighter
     when 'coderay'
-      Helpers.require_library CodeRayRequirePath, 'coderay' unless defined? ::Asciidoctor::Prawn::CodeRayEncoder
       source_string, conum_mapping = extract_conums source_string
       srclang = node.attr 'language', 'text', false
       begin
@@ -1326,7 +1520,6 @@ class Converter < ::Prawn::Document
       fragments = (::CodeRay.scan source_string, srclang).to_prawn
       conum_mapping ? (restore_conums fragments, conum_mapping) : fragments
     when 'pygments'
-      Helpers.require_library 'pygments', 'pygments.rb' unless defined? ::Pygments
       lexer = ::Pygments::Lexer.find_by_alias(node.attr 'language', 'text', false) || ::Pygments::Lexer.find_by_mimetype('text/plain')
       lexer_opts = {
         nowrap: true,
@@ -1356,28 +1549,39 @@ class Converter < ::Prawn::Document
       num_trailing_spaces = source_string.length - (source_string = source_string.rstrip).length if conum_mapping
       # NOTE highlight can return nil if something goes wrong; fallback to encoded source string if this happens
       result = (lexer.highlight source_string, options: lexer_opts) || (node.apply_subs source_string, [:specialcharacters])
-      fragments = guard_indentation text_formatter.format result
-      conum_mapping ? (restore_conums fragments, conum_mapping, num_trailing_spaces) : fragments
+      if (linenums = node.attr? 'linenums')
+        linenums = (node.attr 'start', 1, false).to_i
+        @theme.code_linenum_font_color ||= '999999'
+        conum_mapping ||= {}
+      end
+      fragments = text_formatter.format result
+      fragments = restore_conums fragments, conum_mapping, num_trailing_spaces, linenums if conum_mapping
+      fragments = guard_indentation fragments
     when 'rouge'
-      Helpers.require_library RougeRequirePath, 'rouge' unless defined? ::Rouge::Formatters::Prawn
-      lexer = ::Rouge::Lexer.find(node.attr 'language', 'text', false) || ::Rouge::Lexers::PlainText
-      lexer_opts = lexer.tag == 'php' ? { start_inline: !(node.option? 'mixed') } : {}
+      if (srclang = node.attr 'language', nil, false)
+        if srclang.include? '?'
+          if (lexer = ::Rouge::Lexer.find_fancy srclang)
+            unless lexer.tag != 'php' || (node.option? 'mixed') || ((lexer_opts = lexer.options).key? 'start_inline')
+              lexer = lexer.class.new lexer_opts.merge 'start_inline' => true
+            end
+          end
+        elsif (lexer = ::Rouge::Lexer.find srclang)
+          lexer = lexer.new start_inline: true if lexer.tag == 'php' && !(node.option? 'mixed')
+        end
+      end
+      lexer ||= ::Rouge::Lexers::PlainText
       formatter = (@rouge_formatter ||= ::Rouge::Formatters::Prawn.new theme: (node.document.attr 'rouge-style'), line_gap: @theme.code_line_gap)
-      formatter_opts = (node.attr? 'linenums') ? { line_numbers: true, start_line: (node.attr 'start').to_i } : {}
+      formatter_opts = (node.attr? 'linenums') ? { line_numbers: true, start_line: (node.attr 'start', 1, false).to_i } : {}
       # QUESTION allow border color to be set by theme for highlighted block?
       bg_color_override = formatter.background_color
       source_string, conum_mapping = extract_conums source_string
-      fragments = formatter.format((lexer.lex source_string, lexer_opts), formatter_opts)
+      fragments = formatter.format((lexer.lex source_string), formatter_opts)
       # NOTE cleanup trailing endline (handled in rouge_ext/formatters/prawn instead)
       #fragments[-1][:text] == LF ? fragments.pop : fragments[-1][:text].chop!
       conum_mapping ? (restore_conums fragments, conum_mapping) : fragments
     else
       # NOTE only format if we detect a need (callouts or inline formatting)
-      if source_string =~ BuiltInEntityCharOrTagRx
-        text_formatter.format source_string
-      else
-        [{ text: source_string }]
-      end
+      (XMLMarkupRx.match? source_string) ? (text_formatter.format source_string) : [{ text: source_string }]
     end
 
     node.subs.replace prev_subs if prev_subs
@@ -1445,15 +1649,16 @@ class Converter < ::Prawn::Document
   # and the mapping of lines to conums as the second.
   def extract_conums string
     conum_mapping = {}
+    auto_num = 0
     string = string.split(LF).map.with_index {|line, line_num|
       # FIXME we get extra spaces before numbers if more than one on a line
       if line.include? '<'
         line.gsub(CalloutExtractRx) {
           # honor the escape
-          if $1 == '\\'
-            $&.sub '\\', ''
+          if $1 == ?\\
+            $&.sub $1, ''
           else
-            (conum_mapping[line_num] ||= []) << $3.to_i
+            (conum_mapping[line_num] ||= []) << ($3 == '.' ? (auto_num += 1) : $3.to_i)
             ''
           end
         }
@@ -1469,7 +1674,7 @@ class Converter < ::Prawn::Document
   #--
   # QUESTION can this be done more efficiently?
   # QUESTION can we reuse arrange_fragments_by_line?
-  def restore_conums fragments, conum_mapping, num_trailing_spaces = 0
+  def restore_conums fragments, conum_mapping, num_trailing_spaces = 0, linenums = nil
     lines = []
     line_num = 0
     # reorganize the fragments into an array of lines
@@ -1488,9 +1693,14 @@ class Converter < ::Prawn::Document
     end
     conum_color = @theme.conum_font_color
     last_line_num = lines.size - 1
+    if linenums
+      pad_size = (last_line_num + 1).to_s.length
+      linenum_color = @theme.code_linenum_font_color
+    end
     # append conums to appropriate lines, then flatten to an array of fragments
     lines.flat_map.with_index do |line, cur_line_num|
       last_line = cur_line_num == last_line_num
+      line.unshift text: %(#{(cur_line_num + linenums).to_s.rjust pad_size} ), color: linenum_color if linenums
       if (conums = conum_mapping.delete cur_line_num)
         line << { text: ' ' * num_trailing_spaces } if last_line && num_trailing_spaces > 0
         conum_text = conums.map {|num| conum_glyph num } * ' '
@@ -1551,9 +1761,7 @@ class Converter < ::Prawn::Document
     table_data = []
     node.rows[:head].each do |row|
       table_header = true
-      if (head_transform = theme.table_head_text_transform)
-        head_transform = nil if head_transform == 'none'
-      end
+      head_transform = resolve_text_transform :table_head_text_transform, nil
       row_data = []
       row.each do |cell|
         row_data << {
@@ -1567,7 +1775,8 @@ class Converter < ::Prawn::Document
           colspan: cell.colspan || 1,
           rowspan: cell.rowspan || 1,
           align: (cell.attr 'halign', nil, false).to_sym,
-          valign: (val = cell.attr 'valign', nil, false) == 'middle' ? :center : val.to_sym
+          valign: (val = cell.attr 'valign', nil, false) == 'middle' ? :center : val.to_sym,
+          padding: theme.table_head_cell_padding || theme.table_cell_padding,
         }
       end
       table_data << row_data
@@ -1615,9 +1824,7 @@ class Converter < ::Prawn::Document
             end
           end
           header_cell_data = header_cell_data_cache.dup
-          if (cell_transform = header_cell_data.delete :text_transform) == 'none'
-            cell_transform = nil
-          end
+          cell_transform = resolve_text_transform header_cell_data, nil
           cell_data.update header_cell_data unless header_cell_data.empty?
           cell_line_metrics = calc_line_metrics theme.base_line_height
         when :monospaced
@@ -1655,7 +1862,9 @@ class Converter < ::Prawn::Document
           cell_line_metrics = calc_line_metrics theme.base_line_height
         end
         if cell_line_metrics
-          unless ::Array === (cell_padding = cell_data[:padding]) && cell_padding.size == 4
+          if ::Array === (cell_padding = cell_data[:padding]) && cell_padding.size == 4
+            cell_padding = cell_padding.dup
+          else
             cell_padding = cell_data[:padding] = inflate_padding cell_padding
           end
           cell_padding[0] += cell_line_metrics.padding_top
@@ -1693,13 +1902,18 @@ class Converter < ::Prawn::Document
     table_border_color = theme.table_border_color || theme.table_grid_color || theme.base_border_color
     table_border_style = (theme.table_border_style || :solid).to_sym
     table_border_width = theme.table_border_width
+    if table_header
+      head_border_bottom_color = theme.table_head_border_bottom_color || table_border_color
+      head_border_bottom_style = (theme.table_head_border_bottom_style || table_border_style).to_sym
+      head_border_bottom_width = theme.table_head_border_bottom_width || table_border_width
+    end
     [:top, :bottom, :left, :right].each {|edge| border_width[edge] = table_border_width }
     table_grid_color = theme.table_grid_color || table_border_color
     table_grid_style = (theme.table_grid_style || table_border_style).to_sym
     table_grid_width = theme.table_grid_width || theme.table_border_width
     [:cols, :rows].each {|edge| border_width[edge] = table_grid_width }
 
-    case (grid = node.attr 'grid', 'all', false)
+    case (grid = node.attr 'grid', 'all', 'table-grid')
     when 'all'
       # keep inner borders
     when 'cols'
@@ -1710,7 +1924,7 @@ class Converter < ::Prawn::Document
       border_width[:rows] = border_width[:cols] = 0
     end
 
-    case (frame = node.attr 'frame', 'all', false)
+    case (frame = node.attr 'frame', 'all', 'table-frame')
     when 'all'
       # keep outer borders
     when 'topbot', 'ends'
@@ -1742,6 +1956,7 @@ class Converter < ::Prawn::Document
     end
 
     caption_side = (theme.table_caption_side || :top).to_sym
+    caption_max_width = (theme.table_caption_max_width || 'fit-content').to_s
 
     table_settings = {
       header: table_header,
@@ -1758,7 +1973,7 @@ class Converter < ::Prawn::Document
     }
 
     # QUESTION should we support nth; should we support sequence of roles?
-    case node.attr 'stripes', 'even', false
+    case node.attr 'stripes', nil, 'table-stripes'
     when 'all'
       table_settings[:row_colors] = [body_stripe_bg_color]
     when 'even'
@@ -1774,14 +1989,14 @@ class Converter < ::Prawn::Document
     table table_data, table_settings do
       # NOTE call width to capture resolved table width
       table_width = width
-      @pdf.layout_table_caption node, table_width, alignment if node.title? && caption_side == :top
+      caption_max_width = caption_max_width == 'fit-content' ? table_width : nil
+      @pdf.layout_table_caption node, alignment, caption_max_width if node.title? && caption_side == :top
       if grid == 'none' && frame == 'none'
         if table_header
-          # FIXME allow header border bottom width and style to be set by theme
           rows(0).tap do |r|
-            r.border_bottom_line, r.border_bottom_width = :solid, 1.25
-            # QUESTION should we use the table border color for the bottom border color of the header row?
-            #r.border_bottom_color, r.border_bottom_line, r.border_bottom_width = table_border_color, :solid, 1.25
+            r.border_bottom_color = head_border_bottom_color
+            r.border_bottom_line = head_border_bottom_style
+            r.border_bottom_width = head_border_bottom_width
           end
         end
       else
@@ -1789,16 +2004,15 @@ class Converter < ::Prawn::Document
         cells.border_width = [border_width[:rows], border_width[:cols], border_width[:rows], border_width[:cols]]
 
         if table_header
-          # FIXME allow header border bottom width and style to be set by theme
           rows(0).tap do |r|
-            r.border_bottom_line, r.border_bottom_width = :solid, 1.25
-            # QUESTION should we use the table border color for the bottom border color of the header row?
-            #r.border_bottom_color, r.border_bottom_line, r.border_bottom_width = table_border_color, :solid, 1.25
+            r.border_bottom_color = head_border_bottom_color
+            r.border_bottom_line = head_border_bottom_style
+            r.border_bottom_width = head_border_bottom_width
           end
           rows(1).tap do |r|
-            r.border_top_line, r.border_top_width = :solid, 1.25
-            # QUESTION should we use the table border color for the top border color of the first row?
-            #r.border_top_color, r.border_top_line, r.border_top_width = table_border_color, :solid, 1.25
+            r.border_top_color = head_border_bottom_color
+            r.border_top_line = head_border_bottom_style
+            r.border_top_width = head_border_bottom_width
           end if num_rows > 1
         end
 
@@ -1830,12 +2044,12 @@ class Converter < ::Prawn::Document
         foot_row.font = theme.table_foot_font_family if theme.table_foot_font_family
         foot_row.font_style = theme.table_foot_font_style.to_sym if theme.table_foot_font_style
         # HACK we should do this transformation when creating the cell
-        #if (foot_transform = theme.table_foot_text_transform) && foot_transform != 'none'
+        #if (foot_transform = resolve_text_transform :table_foot_text_transform, nil)
         #  foot_row.each {|c| c.content = (transform_text c.content, foot_transform) if c.content }
         #end
       end
     end
-    layout_table_caption node, table_width, alignment, :bottom if node.title? && caption_side == :bottom
+    layout_table_caption node, alignment, caption_max_width, caption_side if node.title? && caption_side == :bottom
     theme_margin :block, :bottom
   end
 
@@ -1855,13 +2069,30 @@ class Converter < ::Prawn::Document
 
   # NOTE to insert sequential page breaks, you must put {nbsp} between page breaks
   def convert_page_break node
-    advance_page unless at_page_top?
+    if (page_layout = node.attr 'page-layout').nil_or_empty?
+      unless node.role? && (page_layout = (node.roles.map(&:to_sym) & PageLayouts)[-1])
+        page_layout = nil
+      end
+    elsif !PageLayouts.include?(page_layout = page_layout.to_sym)
+      page_layout = nil
+    end
+
+    if at_page_top?
+      if page_layout && page_layout != page.layout && page_is_empty?
+        delete_page
+        advance_page layout: page_layout
+      end
+    elsif page_layout
+      advance_page layout: page_layout
+    else
+      advance_page
+    end
   end
 
   def convert_index_section node
     unless @index.empty?
       space_needed_for_category = @theme.description_list_term_spacing + (2 * (height_of_typeset_text 'A'))
-      column_box [0, cursor], columns: 2, width: bounds.width do
+      column_box [0, cursor], columns: 2, width: bounds.width, reflow_margins: true do
         @index.categories.each do |category|
           # NOTE cursor method always returns 0 inside column_box; breaks reference_bounds.move_past_bottom
           bounds.move_past_bottom if space_needed_for_category > y - reference_bounds.absolute_bottom
@@ -1891,7 +2122,7 @@ class Converter < ::Prawn::Document
       if @media == 'screen'
         pagenums = term.dests.map {|dest| %(<a anchor="#{dest[:anchor]}">#{dest[:page]}</a>) }
       else
-        pagenums = term.dests.uniq {|dest| dest[:page] }.map {|dest| dest[:page].to_s }
+        pagenums = consolidate_ranges term.dests.uniq {|dest| dest[:page] }.map {|dest| dest[:page].to_s }
       end
       text = %(#{text}, #{pagenums * ', '})
     end
@@ -1921,7 +2152,7 @@ class Converter < ::Prawn::Document
       elsif (@media ||= node.document.attr 'media', 'screen') != 'screen' || (node.document.attr? 'show-link-uri')
         # QUESTION should we insert breakable chars into URI when building fragment instead?
         # TODO allow style of printed link to be controlled by theme
-        %(<a href="#{target = node.target}"#{attrs.join}>#{node.text}</a> [<font size="0.85em">#{breakable_uri target}</font>])
+        %(<a href="#{target = node.target}"#{attrs.join}>#{node.text}</a> [<font size="0.85em">#{breakable_uri target}</font>&#93;)
       else
         %(<a href="#{node.target}"#{attrs.join}>#{node.text}</a>)
       end
@@ -1933,27 +2164,36 @@ class Converter < ::Prawn::Document
         %(<a href="#{node.target}">#{node.text || path}</a>)
       elsif (refid = node.attributes['refid'])
         unless (text = node.text)
-          if (refs = node.document.references[:refs])
+          if (refs = node.document.catalog[:refs])
             if ::Asciidoctor::AbstractNode === (ref = refs[refid])
               text = ref.xreftext((@xrefstyle ||= (node.document.attr 'xrefstyle')))
             end
           else
             # Asciidoctor < 1.5.6
-            text = node.document.references[:ids][refid]
+            text = node.document.catalog[:ids][refid]
           end
         end
-        %(<a anchor="#{derive_anchor_from_id refid}">#{text || "[#{refid}]"}</a>)
+        %(<a anchor="#{derive_anchor_from_id refid}">#{text || "[#{refid}]"}</a>).gsub ']', '&#93;'
       else
-        %(<a anchor="#{node.document.attr 'pdf-anchor'}">#{node.text || '[^top]'}</a>)
+        %(<a anchor="#{node.document.attr 'pdf-anchor'}">#{node.text || '[^top&#93;'}</a>)
       end
     when :ref
       # NOTE destination is created inside callback registered by FormattedTextTransform#build_fragment
-      %(<a name="#{node.target}">#{DummyText}</a>)
+      # NOTE id is used instead of target starting in Asciidoctor 2.0.0
+      %(<a name="#{node.target || node.id}">#{DummyText}</a>)
     when :bibref
       # NOTE destination is created inside callback registered by FormattedTextTransform#build_fragment
-      %(<a name="#{target = node.target}">#{DummyText}</a>[#{target}])
+      # NOTE technically node.text should be node.reftext, but subs have already been applied to text
+      # NOTE reftext is no longer enclosed in [] starting in Asciidoctor 2.0.0
+      # NOTE id is used instead of target starting in Asciidoctor 2.0.0
+      if (reftext = node.reftext)
+        reftext = %([#{reftext}]) unless reftext.start_with? '['
+      else
+        reftext = %([#{node.target || node.id}])
+      end
+      %(<a name="#{node.target || node.id}">#{DummyText}</a>#{reftext})
     else
-      warn %(asciidoctor: WARNING: unknown anchor type: #{node.type.inspect})
+      logger.warn %(unknown anchor type: #{node.type.inspect})
     end
   end
 
@@ -1962,8 +2202,7 @@ class Converter < ::Prawn::Document
   end
 
   def convert_inline_button node
-    %(<strong>[#{NarrowNoBreakSpace}#{node.text}#{NarrowNoBreakSpace}]</strong>)
-    #%(<strong>[#{NoBreakSpace}#{node.text}#{NoBreakSpace}]</strong>)
+    %(<button>#{(@theme.button_content || '%s').sub '%s', node.text}</button>)
   end
 
   def convert_inline_callout node
@@ -1976,9 +2215,9 @@ class Converter < ::Prawn::Document
   end
 
   def convert_inline_footnote node
-    if (index = node.attr 'index')
-      #text = node.document.footnotes.find {|fn| fn.index == index }.text
-      %( <color rgb="#999999">[#{index}: #{node.text}]</color>)
+    if (index = node.attr 'index') && (node.document.footnotes.find {|fn| fn.index == index })
+      anchor = node.type == :xref ? '' : %(<a name="_footnoteref_#{index}">#{DummyText}</a>)
+      %(#{anchor}<sup>[<a anchor="_footnotedef_#{index}">#{index}</a>]</sup>)
     elsif node.type == :xref
       # NOTE footnote reference not found
       %( <color rgb="FF0000">[#{node.text}]</color>)
@@ -2003,13 +2242,25 @@ class Converter < ::Prawn::Document
           size_attr = %( size="#{size.sub 'x', 'em'}")
         end
       else
-        size_attr = nil
+        size_attr = ''
       end
       begin
+        if icon_set == 'fa'
+          font_data = nil
+          resolved_icon_set = FontAwesomeIconSets.find {|candidate| (font_data = icon_font_data candidate).unicode icon_name rescue nil }
+          if resolved_icon_set
+            icon_set = resolved_icon_set
+            logger.info { %(#{icon_name} icon found in deprecated fa icon set; use #{icon_set} icon set instead) }
+          else
+            raise
+          end
+        else
+          font_data = icon_font_data icon_set
+        end
         # TODO support rotate and flip attributes
-        %(<font name="#{icon_set}"#{size_attr}>#{::Prawn::Icon::FontData.load(self, icon_set).unicode icon_name}</font>)
+        %(<font name="#{icon_set}"#{size_attr}>#{font_data.unicode icon_name}</font>)
       rescue
-        warn %(asciidoctor: WARNING: #{icon_name} is not a valid icon name in the #{icon_set} icon set)
+        logger.warn %(#{icon_name} is not a valid icon name in the #{icon_set} icon set)
         %([#{node.attr 'alt'}])
       end
     else
@@ -2024,14 +2275,18 @@ class Converter < ::Prawn::Document
       node.extend ::Asciidoctor::Image unless ::Asciidoctor::Image === node
       target, image_format = node.target_and_format
       if image_format == 'gif' && !(defined? ::GMagick::Image)
-        warn %(asciidoctor: WARNING: GIF image format not supported. Install the prawn-gmagick gem or convert #{target} to PNG.) unless scratch?
+        logger.warn %(GIF image format not supported. Install the prawn-gmagick gem or convert #{target} to PNG.) unless scratch?
         img = %([#{node.attr 'alt'}])
       # NOTE an image with a data URI is handled using a temporary file
-      elsif (image_path = resolve_image_path node, target, true, image_format) && (::File.readable? image_path)
-        width_attr = (width = preresolve_explicit_width node.attributes) ? %( width="#{width}") : nil
-        img = %(<img src="#{image_path}" format="#{image_format}" alt="[#{node.attr 'alt'}]"#{width_attr} tmp="#{TemporaryPath === image_path}">)
+      elsif (image_path = resolve_image_path node, target, true, image_format)
+        if ::File.readable? image_path
+          width_attr = (width = preresolve_explicit_width node.attributes) ? %( width="#{width}") : nil
+          img = %(<img src="#{image_path}" format="#{image_format}" alt="[#{encode_quotes node.attr 'alt'}]"#{width_attr} tmp="#{TemporaryPath === image_path}">)
+        else
+          logger.warn %(image to embed not found or not readable: #{image_path}) unless scratch?
+          img = %([#{node.attr 'alt'}])
+        end
       else
-        warn %(asciidoctor: WARNING: image to embed not found or not readable: #{image_path || target}) unless scratch?
         img = %([#{node.attr 'alt'}])
       end
       (node.attr? 'link', nil, false) ? %(<a href="#{node.attr 'link'}">#{img}</a>) : img
@@ -2045,7 +2300,7 @@ class Converter < ::Prawn::Document
       node.type == :visible ? node.text : ''
     else
       dest = {
-        anchor: (anchor_name = %(__indexterm-#{node.object_id}))
+        anchor: (anchor_name = @index.next_anchor_name)
         # NOTE page number is added in InlineDestinationMarker
       }
       anchor = %(<a name="#{anchor_name}" type="indexterm">#{DummyText}</a>)
@@ -2069,7 +2324,7 @@ class Converter < ::Prawn::Document
 
   def convert_inline_menu node
     menu = node.attr 'menu'
-    caret = @theme.menu_caret_content || %( \u203a )
+    caret = (load_theme node.document).menu_caret_content || %( \u203a )
     if !(submenus = node.attr 'submenus').empty?
       %(<strong>#{[menu, *submenus, (node.attr 'menuitem')] * caret}</strong>)
     elsif (menuitem = node.attr 'menuitem')
@@ -2114,23 +2369,19 @@ class Converter < ::Prawn::Document
     node.id ? %(<a name="#{node.id}">#{DummyText}</a>#{quoted_text}) : quoted_text
   end
 
-  # FIXME only create title page if doctype=book!
   def layout_title_page doc
     return unless doc.header? && !doc.notitle
 
-    prev_bg_image = @page_bg_image
+    prev_bg_image = @page_bg_image[side = page_side]
     prev_bg_color = @page_bg_color
-
-    if (bg_image = resolve_background_image doc, @theme, 'title-page-background-image')
-      @page_bg_image = (bg_image == 'none' ? nil : bg_image)
-    end
+    @page_bg_image[side] = (bg_image = resolve_background_image doc, @theme, 'title-page-background-image') && bg_image[0] ? bg_image : nil
     if (bg_color = resolve_theme_color :title_page_background_color)
       @page_bg_color = bg_color
     end
     # NOTE a new page will already be started if the cover image is a PDF
     start_new_page unless page_is_empty?
     start_new_page if @ppbook && verso_page?
-    @page_bg_image = prev_bg_image if bg_image
+    @page_bg_image[side] = prev_bg_image if prev_bg_image
     @page_bg_color = prev_bg_color if bg_color
 
     # IMPORTANT this is the first page created, so we need to set the base font
@@ -2150,9 +2401,7 @@ class Converter < ::Prawn::Document
         relative_to_imagesdir = false
       end
       # HACK quick fix to resolve image path relative to theme
-      unless doc.attr? 'title-logo-image'
-        logo_image_path = ThemeLoader.resolve_theme_asset logo_image_path, (doc.attr 'pdf-stylesdir')
-      end
+      logo_image_path = ThemeLoader.resolve_theme_asset logo_image_path, @themesdir unless doc.attr? 'title-logo-image'
       logo_image_attrs['target'] = logo_image_path
       logo_image_attrs['align'] ||= (@theme.title_page_logo_align || title_align.to_s)
       # QUESTION should we allow theme to turn logo image off?
@@ -2167,7 +2416,9 @@ class Converter < ::Prawn::Document
       # FIXME add API to Asciidoctor for creating blocks like this (extract from extensions module?)
       image_block = ::Asciidoctor::Block.new doc, :image, content_model: :empty, attributes: logo_image_attrs
       # NOTE pinned option keeps image on same page
-      convert_image image_block, relative_to_imagesdir: relative_to_imagesdir, pinned: true
+      indent (@theme.title_page_logo_margin_left || 0), (@theme.title_page_logo_margin_right || 0) do
+        convert_image image_block, relative_to_imagesdir: relative_to_imagesdir, pinned: true
+      end
       @y = initial_y
     end
 
@@ -2184,34 +2435,40 @@ class Converter < ::Prawn::Document
         @y = title_top
       end
       move_down(@theme.title_page_title_margin_top || 0)
-      theme_font :title_page_title do
-        layout_heading doctitle.main,
-          align: title_align,
-          margin: 0,
-          line_height: @theme.title_page_title_line_height
+      indent (@theme.title_page_title_margin_left || 0), (@theme.title_page_title_margin_right || 0) do
+        theme_font :title_page_title do
+          layout_heading doctitle.main,
+            align: title_align,
+            margin: 0,
+            line_height: @theme.title_page_title_line_height
+        end
       end
       move_down(@theme.title_page_title_margin_bottom || 0)
       if doctitle.subtitle
         move_down(@theme.title_page_subtitle_margin_top || 0)
-        theme_font :title_page_subtitle do
-          layout_heading doctitle.subtitle,
-            align: title_align,
-            margin: 0,
-            line_height: @theme.title_page_subtitle_line_height
+        indent (@theme.title_page_subtitle_margin_left || 0), (@theme.title_page_subtitle_margin_right || 0) do
+          theme_font :title_page_subtitle do
+            layout_heading doctitle.subtitle,
+              align: title_align,
+              margin: 0,
+              line_height: @theme.title_page_subtitle_line_height
+          end
         end
         move_down(@theme.title_page_subtitle_margin_bottom || 0)
       end
       if doc.attr? 'authors'
         move_down(@theme.title_page_authors_margin_top || 0)
-        # TODO provide an API in core to get authors as an array
-        authors = (1..(doc.attr 'authorcount', 1).to_i).map {|idx|
-          doc.attr(idx == 1 ? 'author' : %(author_#{idx}))
-        } * (@theme.title_page_authors_delimiter || ', ')
-        theme_font :title_page_authors do
-          layout_prose authors,
-            align: title_align,
-            margin: 0,
-            normalize: false
+        indent (@theme.title_page_authors_margin_left || 0), (@theme.title_page_authors_margin_right || 0) do
+          # TODO provide an API in core to get authors as an array
+          authors = (1..(doc.attr 'authorcount', 1).to_i).map {|idx|
+            doc.attr(idx == 1 ? 'author' : %(author_#{idx}))
+          } * (@theme.title_page_authors_delimiter || ', ')
+          theme_font :title_page_authors do
+            layout_prose authors,
+              align: title_align,
+              margin: 0,
+              normalize: false
+          end
         end
         move_down(@theme.title_page_authors_margin_bottom || 0)
       end
@@ -2219,41 +2476,46 @@ class Converter < ::Prawn::Document
       unless revision_info.empty?
         move_down(@theme.title_page_revision_margin_top || 0)
         revision_text = revision_info * (@theme.title_page_revision_delimiter || ', ')
-        theme_font :title_page_revision do
-          layout_prose revision_text,
-            align: title_align,
-            margin: 0,
-            normalize: false
+        indent (@theme.title_page_revision_margin_left || 0), (@theme.title_page_revision_margin_right || 0) do
+          theme_font :title_page_revision do
+            layout_prose revision_text,
+              align: title_align,
+              margin: 0,
+              normalize: false
+          end
         end
         move_down(@theme.title_page_revision_margin_bottom || 0)
       end
     end
   end
 
-  def layout_cover_page face, doc
+  def layout_cover_page doc, face
     # TODO turn processing of attribute with inline image a utility function in Asciidoctor
-    if (cover_image = (doc.attr %(#{face}-cover-image)))
-      if (cover_image.include? ':') && cover_image =~ ImageAttributeValueRx
-        # TODO support explicit image format
-        cover_image = resolve_image_path doc, $1
+    if (image_path = (doc.attr %(#{face}-cover-image)))
+      if (image_path.include? ':') && image_path =~ ImageAttributeValueRx
+        image_attrs = (AttributeList.new $2).parse ['alt', 'width']
+        image_path = resolve_image_path doc, $1, true, (image_format = image_attrs['format'])
       else
-        cover_image = resolve_image_path doc, cover_image, false
+        image_path = resolve_image_path doc, image_path, false
       end
 
-      if ::File.readable? cover_image
-        go_to_page page_count if face == :back
-        if cover_image.downcase.end_with? '.pdf'
-          # NOTE import_page automatically advances to next page afterwards (can we change this behavior?)
-          import_page cover_image, advance: face != :back
-        else
-          image_page cover_image, canvas: true
-        end
+      return unless image_path
+
+      unless ::File.readable? image_path
+        logger.warn %(#{face} cover image not found or readable: #{image_path})
+        return
+      end
+
+      go_to_page page_count if face == :back
+      if image_path.downcase.end_with? '.pdf'
+        import_page image_path, advance: face != :back
       else
-        warn %(asciidoctor: WARNING: #{face} cover image not found or readable: #{cover_image})
+        image_opts = resolve_image_options image_path, image_attrs, background: true, format: image_format
+        image_page image_path, (image_opts.merge canvas: true)
       end
     end
   ensure
-    unlink_tmp_file cover_image if cover_image
+    unlink_tmp_file image_path if image_path
   end
 
   def start_new_chapter chapter
@@ -2272,13 +2534,13 @@ class Converter < ::Prawn::Document
   # QUESTION why doesn't layout_heading set the font??
   # QUESTION why doesn't layout_heading accept a node?
   def layout_heading string, opts = {}
-    top_margin = (margin = (opts.delete :margin)) || (opts.delete :margin_top) || @theme.heading_margin_top
-    bot_margin = margin || (opts.delete :margin_bottom) || @theme.heading_margin_bottom
-    if (transform = (opts.delete :text_transform) || @text_transform) && transform != 'none'
+    top_margin = (margin = (opts.delete :margin)) || (opts.delete :margin_top) || @theme[%(heading_h#{opts[:level]}_margin_top)] || @theme.heading_margin_top
+    bot_margin = margin || (opts.delete :margin_bottom) || @theme[%(heading_h#{opts[:level]}_margin_bottom)] || @theme.heading_margin_bottom
+    if (transform = resolve_text_transform opts)
       string = transform_text string, transform
     end
     margin_top top_margin
-    typeset_text string, calc_line_metrics((opts.delete :line_height) || @theme.heading_line_height), {
+    typeset_text string, calc_line_metrics((opts.delete :line_height) || @theme[%(heading_h#{opts[:level]}_line_height)] || @theme.heading_line_height), {
       color: @font_color,
       inline_format: true,
       align: @base_align.to_sym
@@ -2290,7 +2552,7 @@ class Converter < ::Prawn::Document
   def layout_prose string, opts = {}
     top_margin = (margin = (opts.delete :margin)) || (opts.delete :margin_top) || @theme.prose_margin_top
     bot_margin = margin || (opts.delete :margin_bottom) || @theme.prose_margin_bottom
-    if (transform = (opts.delete :text_transform) || @text_transform) && transform != 'none'
+    if (transform = resolve_text_transform opts)
       string = transform_text string, transform
     end
     # NOTE used by extensions; ensures linked text gets formatted using the link styles
@@ -2307,8 +2569,20 @@ class Converter < ::Prawn::Document
     margin_bottom bot_margin
   end
 
+  def generate_manname_section node
+    title = node.attr 'manname-title', 'Name'
+    if (next_section = node.sections[0]) && (next_section_title = next_section.title) == next_section_title.upcase
+      title = title.upcase
+    end
+    sect = Section.new node, 1
+    sect.sectname = 'section'
+    sect.id = node.attr 'manname-id'
+    sect.title = title
+    sect << (Block.new sect, :paragraph, source: %(#{node.attr 'manname'} - #{node.attr 'manpurpose'}))
+    sect
+  end
+
   # Render the caption and return the height of the rendered content
-  # QUESTION should layout_caption check for title? and return 0 if false?
   # TODO allow margin to be zeroed
   def layout_caption subject, opts = {}
     mark = { cursor: cursor, page_number: page_number }
@@ -2316,7 +2590,11 @@ class Converter < ::Prawn::Document
     when ::String
       string = subject
     when ::Asciidoctor::AbstractBlock
-      string = subject.title? ? subject.captioned_title : nil
+      if subject.title?
+        string = subject.captioned_title
+      else
+        return 0
+      end
     else
       return 0
     end
@@ -2347,29 +2625,35 @@ class Converter < ::Prawn::Document
   end
 
   # Render the caption for a table and return the height of the rendered content
-  def layout_table_caption node, width, alignment = :left, side = :top
-    # QUESTION should we confine width of title to width of table?
-    if alignment == :left || (excess = bounds.width - width) == 0
-      layout_caption node, side: side
-    else
-      indent excess * (alignment == :center ? 0.5 : 1) do
-        layout_caption node, side: side
+  def layout_table_caption node, table_alignment = :left, max_width = nil, side = :top
+    if max_width && (remainder = bounds.width - max_width) > 0
+      case table_alignment
+      when :right
+        indent(remainder) { layout_caption node, side: side }
+      when :center
+        side_margin = remainder * 0.5
+        indent(side_margin, side_margin) { layout_caption node, side: side }
+      else # :left
+        indent(0, remainder) { layout_caption node, side: side }
       end
+    else
+      layout_caption node, side: side
     end
   end
 
   # NOTE num_front_matter_pages is not used during a dry run
-  def layout_toc doc, num_levels = 2, toc_page_number = 2, num_front_matter_pages = 0
+  def layout_toc doc, num_levels = 2, toc_page_number = 2, num_front_matter_pages = 0, start_at = nil
     go_to_page toc_page_number unless (page_number == toc_page_number) || scratch?
     start_page_number = page_number
+    @y = start_at if start_at
     theme_font :heading, level: 2 do
       theme_font :toc_title do
         toc_title_align = (@theme.toc_title_align || @theme.heading_h2_align || @theme.heading_align || @base_align).to_sym
         layout_heading((doc.attr 'toc-title'), align: toc_title_align)
       end
     end
-    # QUESTION should we skip this whole method if num_levels == 0?
-    if num_levels > 0
+    # QUESTION should we skip this whole method if num_levels < 0?
+    unless num_levels < 0
       dot_leader = theme_font :toc do
         # TODO we could simplify by using nested theme_font :toc_dot_leader
         if (dot_leader_font_style = (@theme.toc_dot_leader_font_style || :normal).to_sym) != font_style
@@ -2404,8 +2688,7 @@ class Converter < ::Prawn::Document
     end
     sections.each do |sect|
       theme_font :toc, level: (sect.level + 1) do
-        sect_title = (transform = @text_transform) && transform != 'none' ?
-            (transform_text sect.numbered_title, transform) : sect.numbered_title
+        sect_title = (transform = @text_transform) ? (transform_text sect.numbered_title, transform) : sect.numbered_title
         # NOTE only write section title (excluding dots and page number) if this is a dry run
         if scratch?
           # FIXME use layout_prose
@@ -2427,7 +2710,10 @@ class Converter < ::Prawn::Document
               key == :styles ? (old_val.merge new_val) : new_val
             end
           end
-          typeset_formatted_text sect_title_fragments, line_metrics
+          pgnum_label_width = rendered_width_of_string pgnum_label
+          indent 0, pgnum_label_width do
+            typeset_formatted_text sect_title_fragments, line_metrics
+          end
           end_page_number = page_number
           end_cursor = cursor
           # TODO it would be convenient to have a cursor mark / placement utility that took page number into account
@@ -2435,7 +2721,6 @@ class Converter < ::Prawn::Document
           move_cursor_to start_cursor
           if dot_leader[:width] > 0 && (dot_leader[:levels].include? sect.level)
             pgnum_label_font_settings = { color: @font_color, font: font_family, size: @font_size, styles: font_styles }
-            pgnum_label_width = rendered_width_of_string pgnum_label
             # WARNING width_of is not accurate if string must use characters from fallback font
             sect_title_width = width_of sect_title, inline_format: true
             save_font do
@@ -2479,7 +2764,8 @@ class Converter < ::Prawn::Document
 
   # TODO delegate to layout_page_header and layout_page_footer per page
   def layout_running_content periphery, doc, opts = {}
-    skip = opts[:skip] || 1
+    skip, skip_pagenums, body_start_page_number = opts[:skip] || [1, 1]
+    body_start_page_number = opts[:body_start_page_number] || 1
     # NOTE find and advance to first non-imported content page to use as model page
     return unless (content_start_page = state.pages[skip..-1].index {|p| !p.imported_page? })
     content_start_page += (skip + 1)
@@ -2490,8 +2776,8 @@ class Converter < ::Prawn::Document
     # FIXME probably need to treat doctypes differently
     is_book = doc.doctype == 'book'
     header = doc.header? ? doc.header : nil
-    # TODO make this section threshold configurable (perhaps in theme?)
-    sections = doc.find_by(context: :section) {|sect| sect.level < 3 && sect != header } || []
+    sectlevels = (@theme[%(#{periphery}_sectlevels)] || 2).to_i
+    sections = doc.find_by(context: :section) {|sect| sect.level <= sectlevels && sect != header } || []
 
     # FIXME we need a proper model for all this page counting
     # FIXME we make a big assumption that part & chapter start on new pages
@@ -2501,7 +2787,7 @@ class Converter < ::Prawn::Document
     section_start_pages = {}
     trailing_section_start_pages = {}
     sections.each do |sect|
-      page_num = (sect.attr 'pdf-page-start').to_i - skip
+      page_num = (sect.attr 'pdf-page-start').to_i - skip_pagenums
       if is_book && ((sect_is_part = sect.part?) || sect.chapter?)
         if sect_is_part
           part_start_pages[page_num] ||= (sect.numbered_title formal: true)
@@ -2524,22 +2810,24 @@ class Converter < ::Prawn::Document
     sections_by_page = {}
     # QUESTION should the default part be the doctitle?
     last_part = nil
-    # QUESTION should we enforce that the preamble is preface?
-    last_chap = is_book ? (doc.attr 'preface-title', 'Preface') : nil
+    # QUESTION should we enforce that the preamble is a preface?
+    last_chap = is_book ? :pre : nil
     last_sect = nil
     sect_search_threshold = 1
     (1..num_pages).each do |num|
       if (part = part_start_pages[num])
         last_part = part
+        last_chap = nil
+        last_sect = nil
       end
       if (chap = chapter_start_pages[num])
         last_chap = chap
+        last_sect = nil
       end
       if (sect = section_start_pages[num])
         last_sect = sect
       elsif part || chap
         sect_search_threshold = num
-        last_sect = nil
       # NOTE we didn't find a section on this page; look back to find last section started
       elsif last_sect
         ((sect_search_threshold)..(num - 1)).reverse_each do |prev|
@@ -2550,7 +2838,17 @@ class Converter < ::Prawn::Document
         end
       end
       parts_by_page[num] = last_part
-      chapters_by_page[num] = last_chap
+      if last_chap == :pre
+        if num == 1
+          chapters_by_page[num] = doc.doctitle
+        elsif num >= body_start_page_number
+          chapters_by_page[num] = is_book ? (doc.attr 'preface-title', 'Preface') : nil
+        else
+          chapters_by_page[num] = doc.attr 'toc-title'
+        end
+      else
+        chapters_by_page[num] = last_chap
+      end
       sections_by_page[num] = last_sect
     end
 
@@ -2560,164 +2858,6 @@ class Converter < ::Prawn::Document
     doc.set_attr 'document-title', doctitle.main
     doc.set_attr 'document-subtitle', doctitle.subtitle
     doc.set_attr 'page-count', num_pages
-    allow_uri_read = doc.attr? 'allow-uri-read'
-    svg_fallback_font = default_svg_font
-
-    if periphery == :header
-      trim_line_metrics = calc_line_metrics(@theme.header_line_height || @theme.base_line_height)
-      trim_top = page_height
-      # NOTE height is required atm
-      trim_height = @theme.header_height || page_margin_top
-      trim_padding = @theme.header_padding || [0, 0, 0, 0]
-      trim_bg_color = resolve_theme_color :header_background_color
-      trim_border_width = @theme.header_border_width || @theme.base_border_width
-      trim_border_style = (@theme.header_border_style || :solid).to_sym
-      trim_border_color = resolve_theme_color :header_border_color
-      trim_valign = (@theme.header_vertical_align || :middle).to_sym
-      trim_img_valign = @theme.header_image_vertical_align
-    else
-      trim_line_metrics = calc_line_metrics(@theme.footer_line_height || @theme.base_line_height)
-      # NOTE height is required atm
-      trim_top = trim_height = @theme.footer_height || page_margin_bottom
-      trim_padding = @theme.footer_padding || [0, 0, 0, 0]
-      trim_bg_color = resolve_theme_color :footer_background_color
-      trim_border_width = @theme.footer_border_width || @theme.base_border_width
-      trim_border_style = (@theme.footer_border_style || :solid).to_sym
-      trim_border_color = resolve_theme_color :footer_border_color
-      trim_valign = (@theme.footer_vertical_align || :middle).to_sym
-      trim_img_valign = @theme.footer_image_vertical_align
-    end
-
-    trim_stamp_name = {
-      recto: %(#{periphery}_recto),
-      verso: %(#{periphery}_verso)
-    }
-    trim_left = {
-      recto: @page_margin_by_side[:recto][3],
-      verso: @page_margin_by_side[:verso][3]
-    }
-    trim_width = {
-      recto: page_width - trim_left[:recto] - @page_margin_by_side[:recto][1],
-      verso: page_width - trim_left[:verso] - @page_margin_by_side[:verso][1]
-    }
-    trim_content_left = {
-      recto: trim_left[:recto] + trim_padding[3],
-      verso: trim_left[:verso] + trim_padding[3]
-    }
-    trim_content_width = {
-      recto: trim_width[:recto] - trim_padding[3] - trim_padding[1],
-      verso: trim_width[:verso] - trim_padding[3] - trim_padding[1]
-    }
-    trim_content_height = trim_height - trim_padding[0] - trim_padding[2] - trim_line_metrics.padding_top - trim_line_metrics.padding_bottom
-    trim_border_color = nil if trim_border_width == 0
-    trim_valign = :center if trim_valign == :middle
-    case trim_img_valign
-    when nil
-      trim_img_valign = trim_valign
-    when 'middle'
-      trim_img_valign = :center
-    when 'top', 'center', 'bottom'
-      trim_img_valign = trim_img_valign.to_sym
-    end
-
-    colspec_dict = PageSides.inject({}) do |acc, side|
-      side_trim_content_width = trim_content_width[side]
-      if (custom_colspecs = @theme[%(#{periphery}_#{side}_columns)] || @theme[%(#{periphery}_columns)])
-        case (colspecs = (custom_colspecs.to_s.tr ',', ' ').split[0..2]).size
-        when 3
-          colspecs = { left: colspecs[0], center: colspecs[1], right: colspecs[2] }
-        when 2
-          colspecs = { left: colspecs[0], center: '0', right: colspecs[1] }
-        when 0, 1
-          colspecs = { left: '0', center: colspecs[0] || '100', right: '0' }
-        end
-        tot_width = 0
-        side_colspecs = colspecs.map {|col, spec|
-          if (alignment_char = spec.chr).to_i.to_s != alignment_char
-            alignment = AlignmentTable[alignment_char] || :left
-            rel_width = spec[1..-1].to_f
-          else
-            alignment = :left
-            rel_width = spec.to_f
-          end
-          tot_width += rel_width
-          [col, { align: alignment, width: rel_width, x: 0 }]
-        }.to_h
-        # QUESTION should we allow the columns to overlap (capping width at 100%)?
-        side_colspecs.each {|_, colspec| colspec[:width] = (colspec[:width] / tot_width) * side_trim_content_width }
-        side_colspecs[:right][:x] = (side_colspecs[:center][:x] = side_colspecs[:left][:width]) + side_colspecs[:center][:width]
-        acc[side] = side_colspecs
-      else
-        acc[side] = {
-          left: { align: :left, width: side_trim_content_width, x: 0 },
-          center: { align: :center, width: side_trim_content_width, x: 0 },
-          right: { align: :right, width: side_trim_content_width, x: 0 }
-        }
-      end
-      acc
-    end
-
-    # TODO move this to a method so it can be reused; cache results
-    content_dict = PageSides.inject({}) do |acc, side|
-      side_content = {}
-      ColumnPositions.each do |position|
-        unless (val = @theme[%(#{periphery}_#{side}_#{position}_content)]).nil_or_empty?
-          # TODO support image URL (using resolve_image_path)
-          if (val.include? ':') && val =~ ImageAttributeValueRx &&
-              ::File.readable?(path = (ThemeLoader.resolve_theme_asset $1, (doc.attr 'pdf-stylesdir')))
-            attrs = (AttributeList.new $2).parse
-            col_width = colspec_dict[side][position][:width]
-            if (fit = attrs['fit']) == 'contain'
-              width = col_width
-            else
-              unless (width = resolve_explicit_width attrs, col_width)
-                # QUESTION should we lookup and scale intrinsic width if explicit width is not given?
-                # NOTE failure message will be reported later when image is rendered
-                width = (to_pt intrinsic_image_dimensions(path)[:width], :px) rescue 0
-              end
-              width = col_width if fit == 'scale-down' && width > col_width
-            end
-            side_content[position] = { path: path, width: width, fit: !!fit }
-          else
-            side_content[position] = val
-          end
-        end
-      end
-      # NOTE set fallbacks if not explicitly disabled
-      if side_content.empty? && periphery == :footer && @theme[%(footer_#{side}_content)] != 'none'
-        side_content = { side == :recto ? :right : :left => '{page-number}' }
-      end
-
-      acc[side] = side_content
-      acc
-    end
-
-    stamps = {}
-    if trim_bg_color || trim_border_color
-      PageSides.each do |side|
-        create_stamp trim_stamp_name[side] do
-          canvas do
-            if trim_bg_color
-              bounding_box [0, trim_top], width: bounds.width, height: trim_height do
-                fill_bounds trim_bg_color
-                if trim_border_color
-                  # TODO stroke_horizontal_rule should support :at
-                  move_down bounds.height if periphery == :header
-                  stroke_horizontal_rule trim_border_color, line_width: trim_border_width, line_style: trim_border_style
-                end
-              end
-            else
-              bounding_box [trim_left[side], trim_top], width: trim_width[side], height: trim_height do
-                # TODO stroke_horizontal_rule should support :at
-                move_down bounds.height if periphery == :header
-                stroke_horizontal_rule trim_border_color, line_width: trim_border_width, line_style: trim_border_style
-              end
-            end
-          end
-        end
-      end
-      stamps[periphery] = true
-    end
 
     pagenums_enabled = doc.attr? 'pagenums'
     attribute_missing_doc = doc.attr 'attribute-missing'
@@ -2731,11 +2871,15 @@ class Converter < ::Prawn::Document
     else
       folio_basis, invert_folio = :virtual, false
     end
+    periphery_layout_cache = {}
     repeat((content_start_page..page_count), dynamic: true) do
       # NOTE don't write on pages which are imported / inserts (otherwise we can get a corrupt PDF)
       next if page.imported_page?
-      pgnum_label = page_number - skip
+      pgnum_label = page_number - skip_pagenums
+      pgnum_label = (RomanNumeral.new page_number, :lower) if pgnum_label < 1
       side = page_side((folio_basis == :physical ? page_number : pgnum_label), invert_folio)
+      # QUESTION should allocation be per side?
+      trim_styles, colspec_dict, content_dict, stamp_names = allocate_running_content_layout page, periphery, periphery_layout_cache
       # FIXME we need to have a content setting for chapter pages
       content_by_position, colspec_by_position = content_dict[side], colspec_dict[side]
       # TODO populate chapter-number
@@ -2747,77 +2891,73 @@ class Converter < ::Prawn::Document
       doc.set_attr 'section-title', (sections_by_page[pgnum_label] || '')
       doc.set_attr 'section-or-chapter-title', (sections_by_page[pgnum_label] || chapters_by_page[pgnum_label] || '')
 
-      stamp trim_stamp_name[side] if stamps[periphery]
+      stamp stamp_names[side] if stamp_names
 
       theme_font periphery do
         canvas do
-          bounding_box [trim_content_left[side], trim_top], width: trim_content_width[side], height: trim_height do
+          bounding_box [trim_styles[:content_left][side], trim_styles[:top]], width: trim_styles[:content_width][side], height: trim_styles[:height] do
+            if (trim_column_rule_width = trim_styles[:column_rule_width]) > 0
+              trim_column_rule_spacing = trim_styles[:column_rule_spacing]
+            else
+              trim_column_rule_width = nil
+            end
+            prev_position = nil
             ColumnPositions.each do |position|
               next unless (content = content_by_position[position])
               next unless (colspec = colspec_by_position[position])[:width] > 0
+              left, colwidth = colspec[:x], colspec[:width]
+              if trim_column_rule_width && colwidth < bounds.width
+                if (trim_column_rule = prev_position)
+                  left += (trim_column_rule_spacing * 0.5)
+                  colwidth -= trim_column_rule_spacing
+                else
+                  colwidth -= (trim_column_rule_spacing * 0.5)
+                end
+              end
               # FIXME we need to have a content setting for chapter pages
               case content
-              when ::Hash
-                # NOTE image vposition respects padding; use negative image_vertical_align value to revert
-                trim_v_padding = trim_padding[0] + trim_padding[2]
+              when ::Array
                 # NOTE float ensures cursor position is restored and returns us to current page if we overrun
                 float do
-                  # NOTE bounding_box is redundant if trim_v_padding is 0
-                  bounding_box [colspec[:x], cursor - trim_padding[0]], width: colspec[:width], height: (bounds.height - trim_v_padding) do
-                    begin
-                      if (img_path = content[:path]).downcase.end_with? '.svg'
-                        svg_data = ::IO.read img_path
-                        svg_obj = ::Prawn::Svg::Interface.new svg_data, self,
-                            position: colspec[:align],
-                            vposition: trim_img_valign,
-                            width: content[:width],
-                            # TODO enforce jail in safe mode
-                            enable_file_requests_with_root: (::File.dirname img_path),
-                            enable_web_requests: allow_uri_read,
-                            fallback_font_name: svg_fallback_font
-                        if content[:fit] && svg_obj.document.sizing.output_height > (available_h = bounds.height)
-                          svg_obj.resize height: available_h
-                        end
-                        svg_obj.draw
-                      else
-                        img_opts = { position: colspec[:align], vposition: trim_img_valign }
-                        if content[:fit]
-                          img_opts[:fit] = [content[:width], bounds.height]
-                        else
-                          img_opts[:width] = content[:width]
-                        end
-                        image img_path, img_opts
-                      end
-                    rescue => e
-                      warn %(asciidoctor: WARNING: could not embed image in running content: #{img_path}; #{e.message})
-                    end
+                  # NOTE bounding_box is redundant if both vertical padding and border width are 0
+                  bounding_box [left, bounds.top - trim_styles[:padding][0] - trim_styles[:content_offset]], width: colwidth, height: trim_styles[:content_height] do
+                    # NOTE image vposition respects padding; use negative image_vertical_align value to revert
+                    image_opts = content[1].merge position: colspec[:align], vposition: trim_styles[:img_valign]
+                    image content[0], image_opts rescue logger.warn %(could not embed image in running content: #{content[0]}; #{$!.message})
                   end
                 end
               when ::String
-                # NOTE minor optimization
-                if content == '{page-number}'
-                  content = pagenums_enabled ? pgnum_label.to_s : nil
-                else
-                  # FIXME get apply_subs to handle drop-line w/o a warning
-                  doc.set_attr 'attribute-missing', 'skip' unless attribute_missing_doc == 'skip'
-                  if (content = doc.apply_subs content).include? '{'
-                    # NOTE must use &#123; in place of {, not \{, to escape attribute reference
-                    content = content.split(LF).delete_if {|line| SimpleAttributeRefRx =~ line } * LF
-                  end
-                  doc.set_attr 'attribute-missing', attribute_missing_doc unless attribute_missing_doc == 'skip'
-                end
                 theme_font %(#{periphery}_#{side}_#{position}) do
+                  # NOTE minor optimization
+                  if content == '{page-number}'
+                    content = pagenums_enabled ? pgnum_label.to_s : nil
+                  else
+                    # FIXME get apply_subs to handle drop-line w/o a warning
+                    doc.set_attr 'attribute-missing', 'skip' unless attribute_missing_doc == 'skip'
+                    if (content = doc.apply_subs content).include? '{'
+                      # NOTE must use &#123; in place of {, not \{, to escape attribute reference
+                      content = content.split(LF).delete_if {|line| SimpleAttributeRefRx.match? line } * LF
+                    end
+                    doc.set_attr 'attribute-missing', attribute_missing_doc unless attribute_missing_doc == 'skip'
+                    if (transform = @text_transform) && transform != 'none'
+                      content = transform_text content, @text_transform
+                    end
+                  end
                   formatted_text_box parse_text(content, color: @font_color, inline_format: [normalize: true]),
-                    at: [colspec[:x], trim_content_height + trim_padding[2] + trim_line_metrics.padding_bottom],
-                    width: colspec[:width],
-                    height: trim_content_height,
+                    at: [left, bounds.top - trim_styles[:padding][0] - trim_styles[:content_offset] + (trim_styles[:valign] == :center ? font.descender * 0.5 : 0)],
+                    width: colwidth,
+                    height: trim_styles[:prose_content_height],
                     align: colspec[:align],
-                    valign: trim_valign,
-                    leading: trim_line_metrics.leading,
+                    valign: trim_styles[:valign],
+                    leading: trim_styles[:line_metrics].leading,
                     final_gap: false,
                     overflow: :truncate
                 end
               end
+              bounding_box [colspec[:x], bounds.top - trim_styles[:padding][0] - trim_styles[:content_offset]], width: colspec[:width], height: trim_styles[:content_height] do
+                stroke_vertical_rule trim_styles[:column_rule_color], at: bounds.left, line_style: trim_styles[:column_rule_style], line_width: trim_column_rule_width
+              end if trim_column_rule
+              prev_position = position
             end
           end
         end
@@ -2826,6 +2966,150 @@ class Converter < ::Prawn::Document
 
     go_to_page prev_page_number
     nil
+  end
+
+  def allocate_running_content_layout page, periphery, cache
+    layout = page.layout
+    cache[layout] ||= begin
+      trim_styles = {
+        line_metrics: (trim_line_metrics = calc_line_metrics @theme[%(#{periphery}_line_height)] || @theme.base_line_height),
+        # NOTE we've already verified this property is set
+        height: (trim_height = @theme[%(#{periphery}_height)]),
+        top: periphery == :header ? page_height : trim_height,
+        padding: (trim_padding = inflate_padding @theme[%(#{periphery}_padding)] || 0),
+        bg_color: (resolve_theme_color %(#{periphery}_background_color).to_sym),
+        border_color: (trim_border_color = resolve_theme_color %(#{periphery}_border_color).to_sym),
+        border_style: (@theme[%(#{periphery}_border_style)] || :solid).to_sym,
+        border_width: (trim_border_width = trim_border_color ? @theme[%(#{periphery}_border_width)] || @theme.base_border_width || 0 : 0),
+        column_rule_color: (trim_column_rule_color = resolve_theme_color %(#{periphery}_column_rule_color).to_sym),
+        column_rule_style: (@theme[%(#{periphery}_column_rule_style)] || :solid).to_sym,
+        column_rule_width: (trim_column_rule_color ? @theme[%(#{periphery}_column_rule_width)] || 0 : 0),
+        column_rule_spacing: (trim_column_rule_spacing = @theme[%(#{periphery}_column_rule_spacing)] || 0),
+        valign: (val = (@theme[%(#{periphery}_vertical_align)] || :middle).to_sym) == :middle ? :center : val,
+        img_valign: @theme[%(#{periphery}_image_vertical_align)],
+        left: {
+          recto: (trim_left_recto = @page_margin_by_side[:recto][3]),
+          verso: (trim_left_verso = @page_margin_by_side[:verso][3]),
+        },
+        width: {
+          recto: (trim_width_recto = page_width - trim_left_recto - @page_margin_by_side[:recto][1]),
+          verso: (trim_width_verso = page_width - trim_left_verso - @page_margin_by_side[:verso][1]),
+        },
+        content_left: {
+          recto: trim_left_recto + trim_padding[3],
+          verso: trim_left_verso + trim_padding[3],
+        },
+        content_width: (trim_content_width = {
+          recto: trim_width_recto - trim_padding[1] - trim_padding[3],
+          verso: trim_width_verso - trim_padding[1] - trim_padding[3],
+        }),
+        content_height: (content_height = trim_height - trim_padding[0] - trim_padding[2] - (trim_border_width * 0.5)),
+        prose_content_height: content_height - trim_line_metrics.padding_top - trim_line_metrics.padding_bottom,
+        # NOTE content offset adjusts y position to account for border
+        content_offset: (periphery == :footer ? trim_border_width * 0.5 : 0),
+      }
+      case trim_styles[:img_valign]
+      when nil
+        trim_styles[:img_valign] = trim_styles[:valign]
+      when 'middle'
+        trim_styles[:img_valign] = :center
+      when 'top', 'center', 'bottom'
+        trim_styles[:img_valign] = trim_styles[:img_valign].to_sym
+      end
+
+      colspec_dict = PageSides.inject({}) do |acc, side|
+        side_trim_content_width = trim_content_width[side]
+        if (custom_colspecs = @theme[%(#{periphery}_#{side}_columns)] || @theme[%(#{periphery}_columns)])
+          case (colspecs = (custom_colspecs.to_s.tr ',', ' ').split[0..2]).size
+          when 3
+            colspecs = { left: colspecs[0], center: colspecs[1], right: colspecs[2] }
+          when 2
+            colspecs = { left: colspecs[0], center: '0', right: colspecs[1] }
+          when 0, 1
+            colspecs = { left: '0', center: colspecs[0] || '100', right: '0' }
+          end
+          tot_width = 0
+          side_colspecs = colspecs.map {|col, spec|
+            if (alignment_char = spec.chr).to_i.to_s != alignment_char
+              alignment = AlignmentTable[alignment_char] || :left
+              rel_width = spec[1..-1].to_f
+            else
+              alignment = :left
+              rel_width = spec.to_f
+            end
+            tot_width += rel_width
+            [col, { align: alignment, width: rel_width, x: 0 }]
+          }.to_h
+          # QUESTION should we allow the columns to overlap (capping width at 100%)?
+          side_colspecs.each {|_, colspec| colspec[:width] = (colspec[:width] / tot_width) * side_trim_content_width }
+          side_colspecs[:right][:x] = (side_colspecs[:center][:x] = side_colspecs[:left][:width]) + side_colspecs[:center][:width]
+          acc[side] = side_colspecs
+        else
+          acc[side] = {
+            left: { align: :left, width: side_trim_content_width, x: 0 },
+            center: { align: :center, width: side_trim_content_width, x: 0 },
+            right: { align: :right, width: side_trim_content_width, x: 0 }
+          }
+        end
+        acc
+      end
+
+      content_dict = PageSides.inject({}) do |acc, side|
+        side_content = {}
+        ColumnPositions.each do |position|
+          unless (val = @theme[%(#{periphery}_#{side}_#{position}_content)]).nil_or_empty?
+            if (val.include? ':') && val =~ ImageAttributeValueRx
+              # TODO support image URL
+              if ::File.readable? (image_path = (ThemeLoader.resolve_theme_asset $1, @themesdir))
+                image_attrs = (AttributeList.new $2).parse ['alt', 'width']
+                image_opts = resolve_image_options image_path, image_attrs, container_size: [colspec_dict[side][position][:width], trim_styles[:content_height]], format: image_attrs['format']
+                side_content[position] = [image_path, image_opts]
+              else
+                # NOTE allows inline image handler to report invalid reference and replace with alt text
+                side_content[position] = %(image:#{image_path}[#{$2}])
+              end
+            else
+              side_content[position] = val
+            end
+          end
+        end
+        # NOTE set fallbacks if not explicitly disabled
+        if side_content.empty? && periphery == :footer && @theme[%(footer_#{side}_content)] != 'none'
+          side_content = { side == :recto ? :right : :left => '{page-number}' }
+        end
+
+        acc[side] = side_content
+        acc
+      end
+
+      if trim_styles[:bg_color] || trim_styles[:border_width] > 0
+        stamp_names = { recto: %(#{layout}_#{periphery}_recto), verso: %(#{layout}_#{periphery}_verso) }
+        PageSides.each do |side|
+          create_stamp stamp_names[side] do
+            canvas do
+              if trim_styles[:bg_color]
+                bounding_box [0, trim_styles[:top]], width: bounds.width, height: trim_styles[:height] do
+                  fill_bounds trim_styles[:bg_color]
+                  if trim_styles[:border_width] > 0
+                    # TODO stroke_horizontal_rule should support :at
+                    move_down bounds.height if periphery == :header
+                    stroke_horizontal_rule trim_styles[:border_color], line_width: trim_styles[:border_width], line_style: trim_styles[:border_style]
+                  end
+                end
+              else
+                bounding_box [trim_styles[:left][side], trim_styles[:top]], width: trim_styles[:width][side], height: trim_styles[:height] do
+                  # TODO stroke_horizontal_rule should support :at
+                  move_down bounds.height if periphery == :header
+                  stroke_horizontal_rule trim_styles[:border_color], line_width: trim_styles[:border_width], line_style: trim_styles[:border_style]
+                end
+              end
+            end
+          end
+        end
+      end
+
+      [trim_styles, colspec_dict, content_dict, stamp_names]
+    end
   end
 
   def add_outline doc, num_levels = 2, toc_page_nums = [], num_front_matter_pages = 0
@@ -2844,7 +3128,7 @@ class Converter < ::Prawn::Document
     outline.define do
       # FIXME use sanitize: :plain_text once available
       if (doctitle = document.sanitize(doc.doctitle use_fallback: true))
-        # FIXME link to title page if there's a cover page (skip cover page and ensuing blank page)
+        # FIXME link to title page if there's a cover page (skip cover page and ensure blank page)
         page title: doctitle, destination: (document.dest_top 1)
       end
       page title: (doc.attr 'toc-title'), destination: (document.dest_top toc_page_nums.first) unless toc_page_nums.none?
@@ -2903,6 +3187,16 @@ class Converter < ::Prawn::Document
 
   def default_svg_font
     @theme.svg_font_family || @theme.base_font_family
+  end
+
+  attr_reader :allow_uri_read
+
+  def resolve_text_transform key, use_fallback = true
+    if (transform = ::Hash === key ? (key.delete :text_transform) : @theme[key.to_s])
+      transform == 'none' ? nil : transform
+    elsif use_fallback
+      @text_transform
+    end
   end
 
   # QUESTION should we pass a category as an argument?
@@ -2978,7 +3272,7 @@ class Converter < ::Prawn::Document
     end
 
     prev_color, @font_color = @font_color, color if color
-    prev_transform, @text_transform = @text_transform, transform if transform
+    prev_transform, @text_transform = @text_transform, (transform == 'none' ? nil : transform) if transform
 
     font family, size: size, style: (style && style.to_sym) do
       result = yield
@@ -3006,7 +3300,7 @@ class Converter < ::Prawn::Document
       end
       available_width = bounds.width - (padding[3] || 0) - (padding[1] || 0)
       if actual_width > available_width
-        adjusted_font_size = ((available_width * font_size).to_f / actual_width).truncate_to_precision 4
+        adjusted_font_size = ((available_width * font_size).to_f / actual_width).truncate 4
         if (min = @theme[%(#{category}_font_size_min)] || @theme.base_font_size_min) && adjusted_font_size < min
           min
         else
@@ -3186,7 +3480,7 @@ class Converter < ::Prawn::Document
   # experience.
   def add_dest_for_block node, id = nil
     if !scratch? && (id ||= node.id)
-      dest_x = bounds.absolute_left.truncate_to_precision 4
+      dest_x = bounds.absolute_left.truncate 4
       # QUESTION when content is aligned to left margin, should we keep precise x value or just use 0?
       dest_x = 0 if dest_x <= page_margin_left
       dest_y = at_page_top? && (node.context == :section || node.context == :document) ? page_height : y
@@ -3195,6 +3489,14 @@ class Converter < ::Prawn::Document
       add_dest id, node_dest
     end
     nil
+  end
+
+  def resolve_alignment_from_role roles
+    if (align_role = roles.reverse.find {|r| TextAlignmentRoles.include? r })
+      align_role[5..-1].to_sym
+    else
+      nil
+    end
   end
 
   # QUESTION is this method still necessary?
@@ -3223,7 +3525,7 @@ class Converter < ::Prawn::Document
     doc = node.document
     imagesdir = relative_to_imagesdir ? (resolve_imagesdir doc) : nil
     image_path ||= node.attr 'target'
-    image_format ||= ::Asciidoctor::Image.format image_path, (::Asciidoctor::Image === node ? node : nil)
+    image_format ||= ::Asciidoctor::Image.format image_path, (::Asciidoctor::Image === node ? node.attributes : nil)
     # NOTE currently used for inline images
     if ::Base64 === image_path
       tmp_image = ::Tempfile.create ['image-', image_format && %(.#{image_format})]
@@ -3239,8 +3541,8 @@ class Converter < ::Prawn::Document
     # handle case when image is a URI
     elsif (node.is_uri? image_path) || (imagesdir && (node.is_uri? imagesdir) &&
         (image_path = (node.normalize_web_path image_path, imagesdir, false)))
-      unless doc.attr? 'allow-uri-read'
-        warn %(asciidoctor: WARNING: allow-uri-read is not enabled; cannot embed remote image: #{image_path}) unless scratch?
+      unless allow_uri_read
+        logger.warn %(allow-uri-read is not enabled; cannot embed remote image: #{image_path}) unless scratch?
         return
       end
       if doc.attr? 'cache-uri'
@@ -3264,34 +3566,89 @@ class Converter < ::Prawn::Document
     end
   end
 
-  # Resolve the path to the background image either from a document attribute or theme key.
+  # Resolve the path and sizing of the background image either from a document attribute or theme key.
   #
-  # Returns The string "none" if the background image value is none, otherwise the resolved
-  # path to the image. If neither the document attribute or theme key are specified, or
-  # the image path cannot be resolved, return nil.
+  # Returns the argument list for the image method if the document attribute or theme key is found. Otherwise,
+  # nothing. The first argument in the argument list is the image path. If that value is nil, the background
+  # image is disabled. The second argument is the options hash to specify the dimensions, such as width and fit.
   def resolve_background_image doc, theme, key
-    if (bg_image = (doc_attr_val = (doc.attr key)) || theme[(key.tr '-', '_').to_sym])
-      return bg_image if bg_image == 'none'
-
-      if (bg_image.include? ':') && bg_image =~ ImageAttributeValueRx
-        # QUESTION should we support width and height in this case?
-        # TODO support explicit format
-        bg_image = $1
-        relative_to_imagesdir = true
+    if (image_path = (doc.attr key) || (from_theme = theme[(key.tr '-', '_').to_sym]))
+      if image_path == 'none'
+        return []
+      elsif (image_path.include? ':') && image_path =~ ImageAttributeValueRx
+        image_attrs = (AttributeList.new $2).parse ['alt', 'width']
+        # TODO support remote image when loaded from theme
+        image_path = from_theme ? (ThemeLoader.resolve_theme_asset $1, @themesdir) : (resolve_image_path doc, $1, true, (image_format = image_attrs['format']))
       else
-        relative_to_imagesdir = false
+        image_path = from_theme ? (ThemeLoader.resolve_theme_asset image_path, @themesdir) : (resolve_image_path doc, image_path, false)
       end
 
-      if (bg_image = doc_attr_val ? (resolve_image_path doc, bg_image, relative_to_imagesdir) :
-          (ThemeLoader.resolve_theme_asset bg_image, (doc.attr 'pdf-stylesdir')))
-        if ::File.readable? bg_image
-          bg_image
-        else
-          warn %(asciidoctor: WARNING: #{key.tr '-', ' '} not found or readable: #{bg_image})
-          nil
-        end
+      return unless image_path
+
+      unless ::File.readable? image_path
+        logger.warn %(#{key.tr '-', ' '} not found or readable: #{image_path})
+        return
       end
+
+      [image_path, (resolve_image_options image_path, image_attrs, background: true, format: image_format)]
     end
+  end
+
+  def resolve_image_options image_path, image_attrs, opts = {}
+    if (image_format = opts[:format] || (::Asciidoctor::Image.format image_path)) == 'svg'
+      image_opts = {
+        enable_file_requests_with_root: (::File.dirname image_path),
+        enable_web_requests: allow_uri_read,
+        fallback_font_name: default_svg_font,
+        format: 'svg',
+      }
+    else
+      image_opts = {}
+    end
+    background = opts[:background]
+    container_size = opts.fetch :container_size, (background ? [page_width, page_height] : [bounds.width, bounds.height])
+    if image_attrs
+      if background && (image_pos = image_attrs['position']) && (image_pos = resolve_background_position image_pos, nil)
+        image_opts.update image_pos
+      end
+      if (image_fit = image_attrs['fit'])
+        container_width, container_height = container_size
+        case image_fit
+        when 'none'
+          if (image_width = resolve_explicit_width image_attrs, container_width)
+            image_opts[:width] = image_width
+          end
+        when 'scale-down'
+          # NOTE if width and height aren't set in SVG, real width and height are computed after stretching viewbox to fit page
+          if (image_width = resolve_explicit_width image_attrs, container_width) && image_width > container_width
+            image_opts[:fit] = container_size
+          elsif (image_size = intrinsic_image_dimensions image_path, image_format) &&
+              (image_width ? image_width * (image_size[:height] / image_size[:width]) > container_height : (to_pt image_size[:width], :px) > container_width || (to_pt image_size[:height], :px) > container_height)
+            image_opts[:fit] = container_size
+          elsif image_width
+            image_opts[:width] = image_width
+          end
+        when 'cover'
+          # QUESTION should we take explicit width into account?
+          if (image_size = intrinsic_image_dimensions image_path, image_format)
+            if container_width * (image_size[:height] / image_size[:width]) < container_height
+              image_opts[:height] = container_height
+            else
+              image_opts[:width] = container_width
+            end
+          end
+        else # contain
+          image_opts[:fit] = container_size
+        end
+      elsif (image_width = resolve_explicit_width image_attrs, container_size[0])
+        image_opts[:width] = image_width
+      else # default to fit=contain if sizing is not specified
+        image_opts[:fit] = container_size
+      end
+    else
+      image_opts[:fit] = container_size
+    end
+    image_opts
   end
 
   # Resolves the explicit width as a PDF pt value if the value is specified in
@@ -3346,7 +3703,39 @@ class Converter < ::Prawn::Document
       end
     elsif attrs.key? 'width'
       # QUESTION should we honor percentage width value?
-      [max_width, (to_pt attrs['width'].to_f, :px)].min
+      width = to_pt attrs['width'].to_f, :px
+      opts[:constrain_to_bounds] ? [max_width, width].min : width
+    end
+  end
+
+  def resolve_background_position value, default_value = {}
+    if value.include? ' '
+      result = {}
+      center = nil
+      (value.split ' ', 2).each do |keyword|
+        if keyword == 'left' || keyword == 'right'
+          result[:position] = keyword.to_sym
+        elsif keyword == 'top' || keyword == 'bottom'
+          result[:vposition] = keyword.to_sym
+        elsif keyword == 'center'
+          center = true
+        end
+      end
+      if center
+        result[:position] ||= :center
+        result[:vposition] ||= :center
+        result
+      elsif (result.key? :position) && (result.key? :vposition)
+        result
+      else
+        default_value
+      end
+    elsif value == 'left' || value == 'right' || value == 'center'
+      { position: value.to_sym, vposition: :center }
+    elsif value == 'top' || value == 'bottom'
+      { position: :center, vposition: value.to_sym }
+    else
+      default_value
     end
   end
 
@@ -3356,8 +3745,8 @@ class Converter < ::Prawn::Document
   # NOTE Ruby 1.9 will sometimes delete a tmp file before the process exits
   def unlink_tmp_file path
     path.unlink if TemporaryPath === path && path.exist?
-  rescue => e
-    warn %(asciidoctor: WARNING: could not delete temporary image: #{path}; #{e.message})
+  rescue
+    logger.warn %(could not delete temporary image: #{path}; #{$!.message})
   end
 
   # NOTE assume URL is escaped (i.e., contains character references such as &amp;)
@@ -3372,13 +3761,49 @@ class Converter < ::Prawn::Document
     %(#{scheme}#{address})
   end
 
+  def consolidate_ranges nums
+    if nums.size > 1
+      prev = nil
+      nums.inject([]) {|accum, num|
+        if prev && (prev.to_i + 1) == num.to_i
+          accum[-1][1] = num
+        else
+          accum << [num]
+        end
+        prev = num
+        accum
+      }.map {|range| range.join '-' }
+    else
+      nums
+    end
+  end
+
   # QUESTION move to prawn/extensions.rb?
   def init_scratch_prototype
+    @save_state = nil
+    @scratch_depth = 0
     # IMPORTANT don't set font before using Marshal, it causes serialization to fail
     @prototype = ::Marshal.load ::Marshal.dump self
     @prototype.state.store.info.data[:Scratch] = true
     # NOTE we're now starting a new page each time, so no need to do it here
     #@prototype.start_new_page if @prototype.page_number == 0
+  end
+
+  def push_scratch doc
+    if (@scratch_depth += 1) == 1
+      @save_state = {
+        catalog: {}.tap {|accum| doc.catalog.each {|k, v| accum[k] = v.dup } },
+        attributes: doc.attributes.dup,
+      }
+    end
+  end
+
+  def pop_scratch doc
+    if (@scratch_depth -= 1) == 0
+      doc.catalog.replace @save_state[:catalog]
+      doc.attributes.replace @save_state[:attributes]
+      @save_state = nil
+    end
   end
 
 =begin
@@ -3396,4 +3821,5 @@ class Converter < ::Prawn::Document
 =end
 end
 end
+Pdf = PDF unless const_defined? :Pdf, false
 end

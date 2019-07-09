@@ -1,5 +1,6 @@
 = Asciidoctor PDF: A native PDF converter for AsciiDoc
 Dan Allen <https://github.com/mojavelinux[@mojavelinux]>; Sarah White <https://github.com/graphitefriction[@graphitefriction]>
+v1.5.0.beta.1, 2019-07-08
 // Settings:
 :experimental:
 :idprefix:
@@ -22,6 +23,8 @@ endif::[]
 // Aliases:
 :project-name: Asciidoctor PDF
 :project-handle: asciidoctor-pdf
+// Variables:
+:release-version: 1.5.0.beta.1
 // URIs:
 :uri-asciidoctor: http://asciidoctor.org
 :uri-gem: http://rubygems.org/gems/asciidoctor-pdf
@@ -37,6 +40,8 @@ endif::[]
 :uri-graphicsmagick: http://www.graphicsmagick.org
 
 ifdef::status[]
+image:https://img.shields.io/travis/asciidoctor/asciidoctor-pdf/master.svg[Build Status (Travis CI),link=https://travis-ci.org/asciidoctor/asciidoctor-pdf]
+image:https://ci.appveyor.com/api/projects/status/524bhoms3j2dp1o3/branch/master?svg=true[Build Status (AppVeyor),link=https://ci.appveyor.com/project/asciidoctor/asciidoctor-pdf]
 image:https://img.shields.io/gem/v/asciidoctor-pdf.svg[Latest Release, link={uri-gem}]
 image:https://img.shields.io/badge/license-MIT-blue.svg[MIT License, link=#copyright]
 endif::[]
@@ -95,7 +100,7 @@ endif::[]
 == Highlights
 
 * Direct AsciiDoc to PDF conversion
-* <<docs/theming-guide#,Configuration-driven style and layout>>
+* <<docs/theming-guide#,Configuration-driven theme (style and layout)>>
 * SVG support
 * PDF document outline (i.e., bookmarks)
 * Table of contents page(s)
@@ -114,38 +119,14 @@ endif::[]
 
 == Prerequisites
 
-All that's needed is Ruby (1.9.3 or above; 2.3.x recommended) and a few Ruby gems, which we explain how to install in the next section.
+All that's needed is Ruby 2.3 or better and a few Ruby gems (including at least Asciidoctor 1.5.3), which we explain how to install in the next section.
 
 To check if you have Ruby available, use the `ruby` command to query the version installed:
 
  $ ruby --version
 
-[WARNING]
-====
-By default, Asciidoctor PDF automatically installs the latest version of Prawn if you don't already have Prawn installed.
-This will fail on older versions of Ruby.
-To workaround, you need to install certain dependencies first.
-
-Starting with Prawn 2.0.0, Prawn requires Ruby >= 2.0.0 during installation.
-Therefore, to use Asciidoctor PDF with Ruby 1.9.3, you must first explicitly install the following dependencies to lock the versions:
-
- $ gem install prawn --version 1.3.0
-   gem install addressable --version 2.4.0
-   gem install prawn-svg --version 0.21.0
-   gem install prawn-templates --version 0.0.3
-
-You can then proceed with installation of Asciidoctor PDF on Ruby 1.9.3.
-
-Starting with Prawn 2.2.0, Prawn requires Ruby >= 2.1.0 during installation.
-Therefore, to use Asciidoctor PDF with Ruby 2.0.0, you must first explicitly install the following dependencies to lock the versions:
-
- $ gem install prawn --version 2.1.0
-   gem install prawn-svg --version 0.26.0
-   gem install prawn-templates --version 0.0.4
-
-For all other versions of Ruby, you can simply install the Asciidoctor PDF gem.
-It will transitively install the required dependencies.
-====
+Make sure this command reports a Ruby version that's at least 2.3.
+If so, you may proceed.
 
 === System Encoding
 
@@ -172,11 +153,11 @@ First, make sure you have satisfied the <<Prerequisites,prerequisites>>.
 Then, you can install the published gem using the following command:
 
  $ gem install asciidoctor-pdf --pre
- 
+
 If you want to syntax highlight source listings, you'll also want to install Rouge, Pygments, or CodeRay.
 Choose one (or more) of the following:
 
-.Rouge (preferred, minimum version: 1.11.1)
+.Rouge (preferred, minimum version: 2.0.0)
  $ gem install rouge
 
 .Pygments
@@ -189,16 +170,18 @@ You then activate syntax highlighting for a given document by adding the `source
 
 [source,asciidoc]
 ----
-:source-highlighter: rouge 
+:source-highlighter: rouge
 ----
+
+=== Run the Application
 
 Assuming all the required gems install properly, verify you can run the `asciidoctor-pdf` script:
 
  $ asciidoctor-pdf -v
 
-If you see the version of {project-name} printed, you're ready to use {project-name}.
+If you see the version of {project-name} printed, you're ready to use {project-name}!
 
-Let's grab an AsciiDoc document to distill and start putting {project-name} to use!
+Let's grab an AsciiDoc document to distill and start putting {project-name} to use.
 
 === An Example AsciiDoc Document
 
@@ -236,7 +219,7 @@ When the script completes, you should see the file [.path]_basic-example.pdf_ in
 Open the [.path]_basic-example.pdf_ file with a PDF viewer to see the result.
 
 .Example PDF document rendered in a PDF viewer
-image::examples/example-pdf-screenshot.png[Screenshot of PDF document,width=800,scaledwidth=100%]
+image::examples/example-pdf-screenshot.png[Screenshot of PDF document,width=850,467,scaledwidth=100%]
 
 ifndef::env-site[]
 You're also encouraged to try converting this <<README#,README>> as well as the documents in the examples directory to see more of what {project-name} can do.
@@ -250,10 +233,18 @@ The layout and styling of the PDF is driven by a YAML configuration file.
 To learn how the theming system works and how to create and apply custom themes, refer to the <<docs/theming-guide#,Asciidoctor PDF Theme Guide>>.
 You can use the built-in theme files, which you can find in the [.path]_data/themes_ directory, as examples.
 
+If you've enabled a source highlighter, you can control the style (aka theme) it applies to source blocks using the `coderay-style`, `pygments-style`, and `rouge-style` attributes, respectively.
+For example, to configure Rouge to use the built-in monokai theme, run Asciidoctor PDF as follows:
+
+ $ asciidoctor-pdf -a rouge-style=monokai basic-example.adoc
+
+It's possible to develop your own theme for Rouge.
+Refer to the <<docs/theming-guide#,Asciidoctor PDF Theme Guide>> for details.
+
 === Support for Non-Latin Languages
 
 Asciidoctor can process the full range of characters in the UTF-8 character set.
-That means you can write your document in any language, save the file with UTF-8 encoding, and expect Asciidoctor to convert the text properly. 
+That means you can write your document in any language, save the file with UTF-8 encoding, and expect Asciidoctor to convert the text properly.
 However, you may notice that certain characters for certain languages, such as Chinese, are missing in the PDF.
 Read on to find out why and how to address it.
 
@@ -264,22 +255,27 @@ See the https://github.com/chloerei/asciidoctor-pdf-cjk-kai_gen_gothic[asciidoct
 
 Using a dedicated theme is necessary because PDF is a "`bring your own font`" kind of system.
 In other words, the font you provide must provide glyphs for all the characters.
-There's no one font that supports all the worlds languages (though some, like Noto Serif, certainly come close). 
+There's no one font that supports all the worlds languages (though some, like Noto Serif, certainly come close).
 Even if there were such a font, bundling that font with the main gem would make the package enormous.
 It would also severely limit the style choices in the default theme, which targets Latin-based languages.
 
 Therefore, we're taking the strategy of creating separate dedicated theme gems that target each language family, such as CJK.
-The base theme for CJK languages is provided by the https://github.com/chloerei/asciidoctor-pdf-cjk[asciidoctro-pdf-cjk] project and a concrete implementation provided by the https://github.com/chloerei/asciidoctor-pdf-cjk-kai_gen_gothic[asciidoctor-pdf-cjk-kai_gen_gothic] project that's based on the kai_gen_gothic font.
+The base theme for CJK languages is provided by the https://github.com/chloerei/asciidoctor-pdf-cjk[asciidoctor-pdf-cjk] project and a concrete implementation provided by the https://github.com/chloerei/asciidoctor-pdf-cjk-kai_gen_gothic[asciidoctor-pdf-cjk-kai_gen_gothic] project that's based on the kai_gen_gothic font.
 Of course, you're free to follow this model and create your own theme gem that uses fonts of your choice.
 
 == Font-Based Icons
 
 You can use icons in your PDF document using any of the following icon sets:
 
-* *fa* - https://fortawesome.github.io/Font-Awesome/[Font Awesome^] (default)
-* *octicon* - https://octicons.github.com/[Octicons^]
+* *fa* - https://fontawesome.com/v4.7.0/icons (default)
+* *fas* - https://fontawesome.com/icons?d=gallery&s=solid[Font Awesome - Solid^]
+* *fab* - https://fontawesome.com/icons?d=gallery&s=brands[Font Awesome - Brands^]
+* *far* - https://fontawesome.com/icons?d=gallery&s=regular[Font Awesome - Regular^]
 * *fi* - http://zurb.com/playground/foundation-icon-fonts-3[Foundation Icons^]
 * *pf* - https://paymentfont.com/[Payment font^]
+
+The fa icon set is deprecated.
+Please use one of the other three FontAwesome icon sets.
 
 You can enable font-based icons by setting the following attribute in the header of your document:
 
@@ -296,7 +292,7 @@ If you want to override the font set globally, also set the `icon-set` attribute
 :icon-set: pf
 ----
 
-Here's an example that shows how to use the Amazon icon from the payment font (pf) icon set in a sentence:
+Here's an example that shows how to use the Amazon icon from the payment font (pf) icon set in a sentence (assuming the `icon-set` is set to `pf):
 
 [source,asciidoc]
 ----
@@ -310,6 +306,13 @@ You can use the `set` attribute on the icon macro to override the icon set for a
 Available now at icon:amazon[set=pf].
 ----
 
+You can also specify the font set using the following shorthand.
+
+[source,asciidoc]
+----
+Available now at icon:amazon@pf[].
+----
+
 In addition to the sizes supported in the HTML backend (lg, 1x, 2x, etc), you can enter any relative value in the size attribute (e.g., 1.5em, 150%, etc).
 
 [source,asciidoc]
@@ -319,20 +322,36 @@ icon:android[size=40em]
 
 You can enable use of fonts during PDF generation (instead of in the document header) by passing the `icons` attribute to the `asciidoctor-pdf` command.
 
- $ asciidoctor-pdf -a icons=font -a icon-set=octicon sample.adoc
+ $ asciidoctor-pdf -a icons=font -a icon-set=pf sample.adoc
 
 Icon-based fonts are handled by the `prawn-icon` gem.
 To find a complete list of available icons, consult the https://github.com/jessedoyle/prawn-icon/tree/master/data/fonts[prawn-icon] repository.
 
 == Image Paths
 
-Images are resolved relative to the value of the `imagesdir` attribute at the time the converter is run.
+Relative images paths are resolved relative to the value of the `imagesdir` attribute at the time the converter is run.
 This is effectively the same as how the built-in HTML converter works when the `data-uri` attribute is set.
-The `imagesdir` is blank by default, which means images are resolved relative to the input document.
+The `imagesdir` is blank by default, which means relative images paths are resolved relative to the input document.
+Absolute image paths are used as is.
 
 If the image is an SVG, and the SVG includes a nested raster image (PNG or JPG) with a relative path, that path is resolved relative to the directory that contains the SVG.
 
 The converter will refuse to include an image if the target is a URI unless the `allow-uri-read` attribute is enabled via the CLI or API.
+
+If the image is an SVG and that SVG links to another image, the linked image will be resolved using the same rules as the original image.
+However, note that a width and height must be specified on the linked image or else the SVG library will fail to process it.
+
+=== Asciidoctor Diagram Integration
+
+As of Asciidoctor PDF 1.5.0.alpha.17 running on Asciidoctor 2 or better, Asciidoctor PDF provides better integration with Asciidoctor Diagram by setting the `data-uri` attribute by default.
+When the `data-uri` attribute is set, Asciidoctor Diagram returns the absolute path to the generated image, which Asciidoctor PDF can then locate.
+(This makes sense since technically, Asciidoctor Diagram must embed the image in the document, similar in spirit to the `data-uri` feature for HTML).
+This means the input directory and the output directory (and thus the imagesoutdir) can differ and Asciidoctor PDF will still be able to locate the generate image.
+
+Prior to Asciidoctor PDF 1.5.0.alpha.17 (or prior to Asciidoctor 2), the way to solve this problem is to set the `imagesdir` attribute to an absolute path.
+That way, it won't matter where the generated image is written.
+Asciidoctor PDF will still be able to find it.
+Keep in mind that this strategy may introduce other side effects you'll have to work around.
 
 == Image Scaling
 
@@ -373,12 +392,11 @@ In this case, the image is scaled down to fit on a single page.
 If you want a block image to align to the boundaries of the page (not the content margin), specify the `align-to-page` option (e.g., `opts="align-to-page"`).
 This is most useful when using vw units because you can make the image cover the entire width of the page.
 
-Images in running content also support the `fit` attribute.
+Images in running content and page background images also support the `fit` attribute (when specified using the image macro).
 If the value of this attribute is `contain`, the image size is increased or decreased to fill the available space while preserving its aspect ratio.
 If the value of this attribute is `scaled-down`, the image size is first resolved in the normal way, then scaled down further to fit within the available space, if necessary.
 
-Page background images are automatically scaled to fit the bounds of the page.
-Any explicit sizing is ignored for those images.
+If sizing information is not specified for a page background image, the image is automatically scaled to fit the bounds of the page (i.e., `fit=contain`).
 
 === Using the pdfwidth Attribute
 
@@ -471,7 +489,7 @@ To perform this work, Asciidoctor delegates to the underlying libraries.
 {uri-prawn-svg}[prawn-svg] brings support for SVG images.
 Without any additional libraries, those are the only supported image file formats.
 
-If you need support for additional image formats, such as GIF, TIFF, or interlaced PNG--and you don't want to convert those images to a supported format--you must install the {uri-prawn-gmagick}[prawn-gmagick] Ruby gem.
+If you need support for additional image formats, such as GIF, TIFF, or interlaced PNG--and you don't want to convert those images to a supported format--you must install the {uri-prawn-gmagick}[prawn-gmagick] (>= 0.0.9) Ruby gem.
 prawn-gmagick is an extension for Prawn based on {uri-graphicsmagick}[GraphicsMagick] that adds support for all the image formats recognized by that library.
 prawn-gmagick has the added benefit of significantly reducing the time it takes to generate a PDF containing a lot of images.
 
@@ -484,23 +502,25 @@ In addition to support for more additional image file formats, this gem also spe
 
 == STEM Support
 
-Unlike the built-in HTML converter, Asciidoctor PDF does not provide native support for STEM blocks and inline macros.
-That's because Asciidoctor core doesn't actually process STEM equations.
-In the HTML output, Asciidoctor relies on the JavaScript-based MathJax library to parse and render the equations in the browser.
-All the HTML converter does is wrap the equations so MathJax is able to find them.
+Unlike the built-in HTML converter, Asciidoctor PDF does not provide native support for STEM blocks and inline macros (i.e., asciimath and latexmath).
+That's because Asciidoctor core doesn't process the STEM content itself.
+It just passes it through to the converter.
+In the HTML output, Asciidoctor relies on the JavaScript-based MathJax library to parse and render the equations in the browser when the page is loaded.
+The HTML converter simply wraps the equations in special markup so MathJax can find them.
 
 In order to insert a rendered equation into the PDF, the toolchain has to parse the equations and convert them to a format the PDF writer (Prawn) can understand.
 That typically means converting to an image.
 
-The recommended solution is an extension named Asciidoctor Mathematical, which we'll cover here.
-Another solution still under development uses Mathoid to convert STEM equations to images.
-Mathoid is a library that invokes MathJax using a headless browser.
+The recommended solution is an extension named Asciidoctor Mathematical, which we'll cover in this document.
+
+Another solution, which is still under development, uses Mathoid to convert STEM equations to images.
+Mathoid is a library that invokes MathJax using a headless browser, so it supports both asciimath and latexmath equations.
 That prototype can be found in the https://github.com/asciidoctor/asciidoctor-extensions-lab#extension-catalog[Asciidoctor extensions lab].
 
 === Asciidoctor Mathematical
 
-{uri-asciidoctor-mathematical}[Asciidoctor Mathematical] is an extension for Asciidoctor that provides alternate processing of STEM blocks and inline macros.
-After the document has been parsed, the extension locates all the STEM blocks and inline macros, converts the equations to images using Mathematical, then replaces them with image nodes.
+{uri-asciidoctor-mathematical}[Asciidoctor Mathematical] is an extension for Asciidoctor that provides alternate processing of STEM blocks and inline macros (currently only latexmath).
+After the document has been parsed, the extension locates all the latexmath blocks and inline macros, converts the equations to images using Mathematical, then replaces them with image nodes.
 Conversion then proceeds as normal.
 
 Asciidoctor Mathematical is a Ruby gem that uses native extensions.
@@ -526,6 +546,34 @@ You control this setting using the `mathematical-format` AsciiDoc attribute:
  $ asciidoctor-pdf -r asciidoctor-mathematical -a mathematical-format=svg sample.adoc
 
 Refer to the {uri-asciidoctor-mathematical}#readme[README] for Asciidoctor Mathematical to learn about additional settings and options.
+
+== Skipping Passthrough Content
+
+Asciidoctor PDF does not support arbitrary passthrough content.
+While the basebackend for the PDF converter is html, it only recognizes a limited subset of inline HTML elements that can be mapped to PDF (e.g., a, strong, em, code, ).
+Therefore, if your content contains passthrough blocks or inlines, you most likely have to use a conditional preprocessor to skip them (and make other arrangements).
+
+Here's an example of how to skip a passthrough block when converting to PDF:
+
+[source,asciidoc]
+----
+\ifndef::backend-pdf[]
+<script>
+//...
+</script>
+\endif::[]
+----
+
+Here's an example of how to only enable a passthrough block when convertering to HTML5:
+
+[source,asciidoc]
+----
+\ifdef::backend-html5[]
+<script>
+//...
+</script>
+\endif::[]
+----
 
 == Shaded Blocks and Performance
 
@@ -580,6 +628,35 @@ Therefore, to print a range of pages as they are labeled in the document, you ne
 For example, if you only want to print the first 5 pages labeled with a page number (e.g., 1-5), and there are 2 pages before the page labeled as page 1, you need to add 2 to both numbers in the range, giving you a physical page range of 3-7.
 That's the range you need to enter into the print dialog.
 
+== Title Page
+
+Unlike other converters, the PDF converter introduces a dedicated title page at the start of the document.
+The title page contains the doctitle, author, date, and revision info.
+If a front cover image is specified, the title page comes after the front cover.
+The title page can be styled using the theme and/or reserved page attributes.
+
+The title page is enabled if either of these conditions are met:
+
+* The document has the `book` doctype.
+* The `title-page` attribute is set (with an empty value) in the document header.
+
+When the title page is enabled, the table of contents (aka TOC) also gets is own page (or pages, if necessary).
+
+== Table of Contents
+
+The table of contents (TOC) is not included by default.
+The TOC is only included if the `toc` attribute is set on the document.
+
+The placement of the table of contents is fixed, and thus the value of the `toc` attribute is effectively ignored in this backend.
+For documents that have the book doctype, the TOC is inserted using discrete pages between the title page and the first page of content.
+For all other doctypes (unless the `title-page` attribute is set), the TOC is inserted in the flow of text in between the document title and the first block of content.
+
+While the table of contents is not included by default, the PDF outline is always included.
+The `toclevels` attribute controls the depth of both the TOC and the PDF outline (regardless of whether the TOC is enabled).
+
+NOTE: If a document that has the book doctype includes a preface, an entry for the preface is only included in the TOC if the `preface-title` is assigned a value (e.g., `preface-title=Preface`).
+This value is used as the heading of the preface and as the text of the entry in the TOC.
+
 == Index Catalog
 
 Asciidoctor PDF supports generating an index catalog that itemizes all index terms defined in the document, allowing the reader to navigate the document by keyword.
@@ -599,27 +676,55 @@ The only restriction is that no index terms may be defined below this section.
 NOTE: Although the catalog is generated automatically, you have to mark the index terms manually.
 However, you could use an extension, such as a TreeProcessor, to automatically mark index terms.
 
-== Optional Scripts
+== Optimizing the Generated PDF
 
-{project-name} also provides a shell script that invokes GhostScript (`gs`) to optimize and compress the generated PDF with minimal impact on quality.
+=== optimize-pdf
+
+{project-name} also provides a shell script that uses GhostScript (`gs`) to optimize and compress the generated PDF (with minimal impact on quality).
 You must have Ghostscript installed to use it.
 
 Here's an example usage:
 
  $ ./bin/optimize-pdf basic-example.pdf
 
-The command will generate the file [.path]_example-optimized.pdf_ in the current directory.
+The command will generate the file [.path]_basic-example-optimized.pdf_ in the same directory.
 
 WARNING: The `optimize-pdf` script currently requires a Bash shell (Linux, OSX, etc).
 We plan to rewrite the script in Ruby so it works across platforms (see https://github.com/asciidoctor/asciidoctor-pdf/issues/1[issue #1])
 
-IMPORTANT: The `optimize-pdf` script relies on Ghostscript >= 9.10.
-Otherwise, it may actually make the PDF larger.
-Also, you should only consider using it if the file size of the original PDF is > 5MB.
-
 If a file is found with the extension `.pdfmark` and the same rootname as the input file, it is used to add metadata to the generated PDF document.
 This file is necessary to preserve the document metadata since Ghostscript will otherwise drop it.
 That's why {project-name} always creates this file in addition to the PDF.
+
+IMPORTANT: The `optimize-pdf` script relies on Ghostscript >= 9.10.
+Otherwise, it may actually make the PDF larger.
+You should probably only consider using it if the file size of the original PDF is > 5MB.
+
+=== hexapdf
+
+Another option to optimize the PDF is https://hexapdf.gettalong.org/[hexapdf] (gem: hexapdf, command: hexapdf).
+Before introducing it, though, it's important to point out that its license is AGPL.
+If that's okay with you, read on to learn how to use it.
+
+First, install the hexapdf gem using the following command:
+
+ $ gem install hexapdf
+
+You can then use it to optimize your PDF as follows:
+
+ $ hexapdf optimize --compress-pages --force basic-example.pdf basic-example-optimized.pdf
+
+This command does not manipulate the images in any way.
+It merely compresses the objects in the PDF and prunes any unreachable references.
+But given how much waste Prawn leaves behind, this turns out to reduce the file size significantly.
+
+To see more options, run:
+
+ $ hexapdf help optimize
+
+For example, to make the source of the PDF a bit more readable, set the stream-related options to `preserve`.
+
+hexapdf also allows you to add password protection to your PDF, if that's something you're interested in doing.
 
 ifndef::env-site[]
 == Contributing
@@ -627,6 +732,8 @@ ifndef::env-site[]
 In the spirit of free software, _everyone_ is encouraged to help improve this project.
 
 To contribute code, simply fork the project on GitHub, hack away and send a pull request with your proposed changes.
+*All pull requests must include a) tests that verify the code change and b) an entry in the CHANGELOG.adoc file to document what changed.*
+If a pull request is missing tests or a CHANGELOG entry, *it will not be merged*.
 
 Feel free to use the {uri-project-issues}[issue tracker] or {uri-project-list}[Asciidoctor mailing list] to provide feedback or suggestions in other ways.
 
@@ -665,7 +772,7 @@ We'll leverage the project configuration to install the necessary dependencies.
 
 If you're using {uri-rvm}[RVM], we recommend creating a new gemset to work with {project-name}:
 
- $ rvm use 2.3@asciidoctor-pdf --create
+ $ rvm use 2.5@asciidoctor-pdf --create
 
 We like RVM because it keeps the dependencies required by various projects isolated.
 
@@ -686,15 +793,107 @@ Then use the `bundle` command to install the project dependencies:
 
 NOTE: You need to call `bundle` from the project directory so that it can find the [.path]_Gemfile_.
 
+=== Run the Tests
+
+Tests are written using RSpec.
+To run the tests, simply invoke rspec via bundler.
+
+ $ bundle exec rspec
+
+To disable the visual integration tests, pass the `` option:
+
+ $ bundle exec rspec -t ~integration
+
+If a visual integration test fails, you can instruct the test suite to keep the files in the [.path]_spec/output_ directory by setting the `DEBUG` environment variable:
+
+ $ DEBUG=true bundle exec rspec -t integration
+
+If you want to see the name of each test as it is run, add the `-fd` option:
+
+ $ bundle exec rspec -fd
+
+You can also use the provided Rake task (note the name difference):
+
+ $ bundle exec rake spec
+
+Running tests using `rspec` directly gives you the advantage of being able to specify additional options.
+
+To run a single test, you can filter by the name of the test.
+For example, to run all tests that pertain to failures, use:
+
+ $ bundle exec rspec -e fail
+
+To run all tests that have `wip` in the name, use:
+
+ $ bundle exec rspec -e wip
+
+You can also run all tests in a given file by passing the file's path to rspec:
+
+ $ bundle exec rspec spec/toc_spec.rb
+
+For a full list of options that rspec provides, run `rspec -h`.
+
+=== Run the Application (optional)
+
+Like with Bundler, you have to run the application from the project directory.
 Assuming all the required gems install properly, verify you can run the `asciidoctor-pdf` script using Ruby:
 
- $ bundle exec ./bin/asciidoctor-pdf -v
+ $ bundle exec asciidoctor-pdf -v
 
 If you see the version of {project-name} printed, you're ready to use {project-name}!
 
-CAUTION: If you get an error message--and you're not using a Ruby manager like RVM--you may need to invoke the script through `bundle exec`:
-For best results, be sure to always use `bundle exec` whenever invoking the `./bin/asciidoctor-pdf` script in development mode.
+You can use the application to convert a document as follows:
+
+ $ bundle exec asciidoctor-pdf /path/to/sample.adoc
+
+=== Install the Application (optional)
+
+If you want to install the application globally so you can run it anywhere, use the following `rake` task:
+
+ $ bundle exec rake install
+
+This task will package the gem and install it into your system gems.
+
+If you want to install the gem using a separate command, first use the following `rake` task to build it:
+
+ $ rm -rf pkg
+   bundle exec rake build
+
+This task packages the application as a gem and writes it to the [.path]_pkg_ directory.
+A message will be printed to the console telling you the exact filename.
+You can now use the `gem install` command to install it.
+
+ $ gem install pkg/*.gem
+
+You'll want to pay attention to which Ruby installation you are installing the gem into.
+If successful, the `asciidoctor-pdf` executable will be available on your PATH.
+
 endif::[]
+
+=== Test a Pull Request
+
+To test a pull request (PR), you first need to fetch the branch that contains the change and switch to it.
+The steps below are covered in detail in the https://help.github.com/articles/checking-out-pull-requests-locally[GitHub help].
+
+Let's assume you want to test PR 955.
+Here's how you fetch and switch to it:
+
+ $ git fetch origin pull/955/head:pr-955-review
+   git checkout pr-955-review
+
+IMPORTANT: Make sure you replace the number with the number of the PR you want to test.
+
+In case any dependencies have changed, you should run the `bundle` command again:
+
+ $ bundle
+
+Now you can run the application as modified by the PR:
+
+ $ bundle exec asciidoctor-pdf /path/to/sample.adoc
+
+To switch back to master, just type:
+
+ $ git checkout master
 
 [[resources,Links]]
 == Resources
@@ -707,7 +906,7 @@ endif::[]
 
 == Copyright
 
-Copyright (C) 2014-2018 OpenDevise Inc. and the Asciidoctor Project.
+Copyright (C) 2014-2019 OpenDevise Inc. and the Asciidoctor Project.
 Free use of this software is granted under the terms of the MIT License.
 
 For the full text of the license, see the <<LICENSE#,LICENSE>> file.

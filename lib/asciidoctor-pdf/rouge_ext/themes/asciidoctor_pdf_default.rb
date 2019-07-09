@@ -2,8 +2,8 @@ module Rouge
   module Themes
     # A variation on the pastie style from Pygments, customized for Asciidoctor PDF
     # See https://bitbucket.org/birkenfeld/pygments-main/src/default/pygments/styles/pastie.py
-    class AsciidoctorPdfDefault < CSSTheme
-      name 'asciidoctor_pdf_default' 
+    class AsciidoctorPDFDefault < CSSTheme
+      name 'asciidoctor_pdf_default'
 
       # Deviate from pastie here since our italic is actually a thinner font
       style Comment,                   fg: '#888888' #, italic: true

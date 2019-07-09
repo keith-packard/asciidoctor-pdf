@@ -4,6 +4,7 @@ v1.0, 2014-01-01: The first incarnation of The Documentation Chronicles.
 :description: This story chronicles the inexplicable hazards and vicious beasts a \
 team must conquer and vanquish on their journey to discovering the true power of \
 Open Source.
+:organization: Company Name
 :doctype: book
 // Settings:
 :experimental:
@@ -13,7 +14,12 @@ Open Source.
 :sectnums:
 :toc:
 :toclevels: 3
+ifeval::["{asciidoctor-version}" < "1.5.7"]
+:legacy-footnoteref:
+endif::[]
 ifdef::backend-pdf[]
+:pdf-theme: chronicles
+:pdf-themesdir: {docdir}
 :title-logo-image: image:sample-banner.svg[pdfwidth=4.25in,align=center]
 :source-highlighter: rouge
 //:rouge-style: github
@@ -22,7 +28,7 @@ ifdef::backend-pdf[]
 endif::[]
 // URIs:
 :uri-devoxx: https://devoxx.be
-:uri-devoxx-top-talks: https://www.youtube.com/watch?v=1OpAgZvYXLQ&list=PLRsbF2sD7JVq7fv1GZGORShSUIae1ZAPy&index=&#49;
+:uri-devoxx-top-talks: https://www.youtube.com/watch?v=1OpAgZvYXLQ&list=PLRsbF2sD7JVq7fv1GZGORShSUIae1ZAPy&index=1
 :uri-stbernardusabt12: http://www.sintbernardus.be/stbernardusabt12.php?l=en
 :uri-wolpertinger: http://en.wikipedia.org/wiki/Wolpertinger
 
@@ -48,19 +54,30 @@ image::wolpertinger.jpg[Wolpertinger,pdfwidth=50%,link={uri-wolpertinger}]
 You may not be familiar with these {uri-wolpertinger}[ravenous beasts].
 Trust us, they'll eat your shorts and suck loops from your code.
 In light of this danger, we've searched high and wide for the security crew's defensive operations manual.
-We can't find it and the DefOps{empty}footnote:[a portmanteau of “defensive” and “operations”] werewolves haven't returned from their rendezvous at Bier Central.
+ifndef::legacy-footnoteref[]
+We can't find it and the DefOps{empty}footnote:defops[DefOps is a portmanteau of "`defensive`" and "`operations`".] werewolves haven't returned from their rendezvous at Bier Central.
+endif::[]
+ifdef::legacy-footnoteref[]
+We can't find it and the DefOps{empty}footnoteref:[defops,DefOps is a portmanteau of "`defensive`" and "`operations`".] werewolves haven't returned from their rendezvous at Bier Central.
+endif::[]
 They've either eaten each other or fallen victim to the Wolpertingers roaming the streets of ((Antwerp)).
 Quick, hit kbd:[Ctrl,Alt,Backspace] or select menu:File[Quit] and let's bail out of here!
 
-WARNING: Working with werewolves leads to howling and trying to train aggressive regular expressions with Pavlovian reinforcement.
+ifndef::legacy-footnoteref[]
+WARNING: Working with DefOps{empty}footnote:defops[] werewolves leads to howling and trying to train aggressive regular expressions with Pavlovian reinforcement.
+endif::[]
+ifdef::legacy-footnoteref[]
+WARNING: Working with DefOps{empty}footnoteref:[defops] werewolves leads to howling and trying to train aggressive regular expressions with Pavlovian reinforcement.
+endif::[]
 
 _Weak light from the hallway trickled across the theater, chased by a distant scream._
 
 === Rendezvous Point
 
-Come on, [#bier-central]_Bier Central_.
+Come on, [[bier-central,Bier Central]]_Bier Central_, of course!
 Did you have to ask?
-If you beat me there, I'll take a {uri-stbernardusabt12}[St. Bernardus Abt 12].
+If you beat me there, order me a {uri-stbernardusabt12}[St. Bernardus Abt 12].
+Here's some &#x20ac;.
 
 [#ravages]
 == The Ravages of Writing
@@ -78,7 +95,12 @@ Crystalline XML tags relentlessly bombarded the theater.
 </author>
 ----
 
-Despite the assault, we were still attempting to draft an example of a defensive operation.
+ifndef::legacy-footnoteref[]
+Despite the assault, we continued our pursuit to draft a DefOps{empty}footnote:defops[] plan.
+endif::[]
+ifdef::legacy-footnoteref[]
+Despite the assault, we continued our pursuit to draft a DefOps{empty}footnoteref:[defops] plan.
+endif::[]
 
 .DefOps Plan
 ====
@@ -349,19 +371,20 @@ public class GreetingReceiver implements EventReceiver, Serializable {
 }
 ----
 
-We already showed you an XML example in <<ravages>>, a language we often rant about over beers at <<bier-central,Bier Central>>.
+We already showed you an XML example in <<ravages>>, a language we often rant about over beers at <<bier-central>>.
 
 I'll trade you a little table for some of that bark.
 
-[cols=3,frame=topbot,grid=rows]
+[cols=4,frame=topbot,grid=rows]
 |===
-|Name of Column 1 |Name of Column 2 |Name of Column 3
+|Column 1 |Column 2 |Column 3 |Column 4
 
-^m|Prefix the `{vbar}` with `{caret}` to center content horizontally
-.<|Prefix the `{vbar}` with a `.` and `<` to align the content to the top of the cell
->|Prefix the `{vbar}` with `>` to align the content to the right horizontally
+^m|Prefix `{vbar}` with `{caret}` to center content horizontally within the cell.
+.>|Prefix `{vbar}` with a `.` and `>` to align content to the bottom of the cell.
+^.^|Prefix `{vbar}` with a `^`, `.`, and `^` to place content in the middle of the cell.
+>|Prefix `{vbar}` with `>` to align content to the right horizontally within the cell.
 
-3+^.^e|This content spans all three columns (`3{plus}`) and is centered both horizontally (`{caret}`) and vertically (`.{caret}`) within the cell.
+4+^e|This content spans all four columns (`4{plus}`) and is centered horizontally (`{caret}`) within the cell.
 |===
 
 Wait.
@@ -487,7 +510,7 @@ Here's some content inside an open block.
 == Credits
 
 .Brought to you with icon:heart[] by OpenDevise
-[%header%footer,cols="2,2s,3",grid=rows,frame=topbot,width=75%,caption=]
+[%header%footer,cols="2,2s,^4",grid=rows,frame=topbot,width=75%,caption=]
 |===
 |Name |Title |Alias
 
@@ -499,7 +522,7 @@ Here's some content inside an open block.
 |Vice President
 |http://twitter.com/mojavelinux[@mojavelinux]
 
-3+^.e|Powered by Open Source
+3+^.e|Powered by Open Source(TM)
 |===
 
 [index]

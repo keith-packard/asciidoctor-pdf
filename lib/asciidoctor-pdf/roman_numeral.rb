@@ -10,10 +10,10 @@
 # distribute, sublicense, and/or sell copies of the Software, and to
 # permit persons to whom the Software is furnished to do so, subject to
 # the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be
 # included in all copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 # EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 # MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -28,7 +28,7 @@
 ########################################################################
 
 module Asciidoctor
-module Pdf
+module PDF
 class RomanNumeral
   BaseDigits = {
     1    => 'I',
@@ -73,6 +73,14 @@ class RomanNumeral
     @integer_value
   end
 
+  def odd?
+    to_i.odd?
+  end
+
+  def even?
+    to_i.even?
+  end
+
   def next
     RomanNumeral.new @integer_value + 1, @letter_case
   end
@@ -86,11 +94,15 @@ class RomanNumeral
     RomanNumeral.new @integer_value - 1, @letter_case
   end
 
+  def empty?
+    false
+  end
+
   def self.int_to_roman value
     result = []
     BaseDigits.keys.reverse_each do |ival|
       while value >= ival
-        value -= ival 
+        value -= ival
         result << BaseDigits[ival]
       end
     end

@@ -1,6 +1,6 @@
 module Rouge
 module Formatters
-# Transforms a token stream into an array of 
+# Transforms a token stream into an array of
 # formatted text fragments for use with Prawn.
 class Prawn < Formatter
   tag 'prawn'
@@ -13,11 +13,11 @@ class Prawn < Formatter
     ::Rouge::Token::Tokens::Generic::Subheading
   ]
 
-  LF = %(\n)
-  NoBreakSpace = %(\u00a0)
-  InnerIndent = %(\n )
-  GuardedIndent = %(\u00a0)
-  GuardedInnerIndent = %(\n\u00a0)
+  LF = ?\n
+  NoBreakSpace = ?\u00a0
+  InnerIndent = %(#{LF} )
+  GuardedIndent = NoBreakSpace
+  GuardedInnerIndent = %(#{LF}#{NoBreakSpace})
   BoldStyle = [:bold].to_set
   ItalicStyle = [:italic].to_set
   BoldItalicStyle = [:bold, :italic].to_set
@@ -26,7 +26,7 @@ class Prawn < Formatter
   def initialize opts = {}
     unless ::Rouge::Theme === (theme = opts[:theme])
       unless theme && (theme = ::Rouge::Theme.find theme)
-        theme = ::Rouge::Themes::AsciidoctorPdfDefault
+        theme = ::Rouge::Themes::AsciidoctorPDFDefault
       end
       theme = theme.new
     end

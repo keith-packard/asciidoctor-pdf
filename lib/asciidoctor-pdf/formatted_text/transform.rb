@@ -1,38 +1,63 @@
 module Asciidoctor
-module Pdf
+module PDF
 module FormattedText
 class Transform
-  LF = %(\n)
+  LF = ?\n
+  ZeroWidthSpace = ?\u200b
   CharEntityTable = {
-    lt: '<',
-    gt: '>',
-    amp: '&',
-    quot: '"',
-    apos: '\''
+    amp: ?&,
+    apos: ?',
+    gt: ?>,
+    lt: ?<,
+    nbsp: ?\u00a0,
+    quot: ?",
   }
-  CharRefRx = /&(?:#(\d{2,6})|(#{CharEntityTable.keys * '|'}));/
+  CharRefRx = /&(?:(#{CharEntityTable.keys * ?|})|#(?:(\d\d\d{0,4})|x([a-f\d][a-f\d][a-f\d]{0,3})));/
   TextDecorationTable = { 'underline' => :underline, 'line-through' => :strikethrough }
-  #DummyText = %(\u0000)
+  #DummyText = ?\u0000
 
   def initialize(options = {})
     @merge_adjacent_text_nodes = options[:merge_adjacent_text_nodes]
     # TODO add support for character spacing
     if (theme = options[:theme])
-      @link_font_settings = {
-        color: theme.link_font_color,
-        font: theme.link_font_family,
-        size: theme.link_font_size,
-        styles: to_styles(theme.link_font_style, theme.link_text_decoration)
-      }.select! {|_, val| val }
-      @monospaced_font_settings = {
-        color: theme.literal_font_color,
-        font: theme.literal_font_family,
-        size: theme.literal_font_size,
-        styles: to_styles(theme.literal_font_style)
-      }.select! {|_, val| val }
+      @theme_settings = {
+        button: {
+          color: theme.button_font_color,
+          font: theme.button_font_family,
+          size: theme.button_font_size,
+          styles: to_styles(theme.button_font_style),
+          background_color: (button_bg_color = theme.button_background_color),
+          border_width: (button_border_width = theme.button_border_width),
+          border_color: button_border_width && (theme.button_border_color || theme.base_border_color),
+          border_offset: (button_bg_or_border = button_bg_color || button_border_width) && theme.button_border_offset,
+          border_radius: button_bg_or_border && theme.button_border_radius,
+          callback: button_bg_or_border && [TextBackgroundAndBorderRenderer],
+        }.compact,
+        code: {
+          color: theme.literal_font_color,
+          font: theme.literal_font_family,
+          size: theme.literal_font_size,
+          styles: to_styles(theme.literal_font_style),
+          background_color: (monospaced_bg_color = theme.literal_background_color),
+          border_width: (monospaced_border_width = theme.literal_border_width),
+          border_color: monospaced_border_width && (theme.literal_border_color || theme.base_border_color),
+          border_offset: (monospaced_bg_or_border = monospaced_bg_color || monospaced_border_width) && theme.literal_border_offset,
+          border_radius: monospaced_bg_or_border && theme.literal_border_radius,
+          callback: monospaced_bg_or_border && [TextBackgroundAndBorderRenderer],
+        }.compact,
+        link: {
+          color: theme.link_font_color,
+          font: theme.link_font_family,
+          size: theme.link_font_size,
+          styles: to_styles(theme.link_font_style, theme.link_text_decoration)
+        }.compact,
+      }
     else
-      @link_font_settings = { color: '0000FF' }
-      @monospaced_font_settings = { font: 'Courier', size: 0.9 }
+      @theme_settings = {
+        button: { font: 'Courier', styles: [:bold].to_set },
+        code: { font: 'Courier', size: 0.9 },
+        link: { color: '0000FF' },
+      }
     end
   end
 
@@ -75,8 +100,9 @@ class Transform
             fragment = {
               image_path: attributes[:tmp] == 'true' ? attributes[:src].extend(TemporaryPath) : attributes[:src],
               image_format: attributes[:format],
-              text: attributes[:alt],
-              callback: InlineImageRenderer
+              # a zero-width space in the text will cause the image to be duplicated
+              text: (attributes[:alt].delete ZeroWidthSpace),
+              callback: [InlineImageRenderer],
             }
             if (img_w = attributes[:width])
               fragment[:image_width] = img_w
@@ -86,22 +112,22 @@ class Transform
           end
         end
       when :text
-        text = node[:value]
-        # NOTE the remaining logic is shared with :entity
         if @merge_adjacent_text_nodes && previous_fragment_is_text
-          fragments << { text: %(#{fragments.pop[:text]}#{text}) }
+          fragments << { text: %(#{fragments.pop[:text]}#{node[:value]}) }
         else
-          fragments << { text: text }
+          fragments << { text: node[:value] }
         end
         previous_fragment_is_text = true
-      when :entity
-        if (name = node[:name])
-          text = CharEntityTable[name]
+      when :charref
+        if (ref_type = node[:reference_type]) == :name
+          text = CharEntityTable[node[:value]]
+        elsif ref_type == :decimal
+          # FIXME AFM fonts do not include a thin space glyph; set fallback_fonts to allow glyph to be resolved
+          text = [node[:value]].pack('U1')
         else
           # FIXME AFM fonts do not include a thin space glyph; set fallback_fonts to allow glyph to be resolved
-          text = [node[:number]].pack('U*')
+          text = [(node[:value].to_i 16)].pack('U1')
         end
-        # NOTE the remaining logic is shared with :text
         if @merge_adjacent_text_nodes && previous_fragment_is_text
           fragments << { text: %(#{fragments.pop[:text]}#{text}) }
         else
@@ -120,9 +146,9 @@ class Transform
       styles << :bold
     when :em
       styles << :italic
-    when :code
-      # NOTE prefer old value, except for styles, which should be combined
-      fragment.update(@monospaced_font_settings) {|k, old_v, new_v| k == :styles ? old_v.merge(new_v) : old_v }
+    when :code, :button
+      # NOTE prefer old value, except for styles and callback, which should be combined
+      fragment.update(@theme_settings[tag_name]) {|k, oval, nval| k == :styles ? oval.merge(nval) : (k == :callback ? oval.union(nval) : oval) }
     when :color
       if !fragment[:color]
         if (rgb = attrs[:rgb])
@@ -165,7 +191,7 @@ class Transform
         fragment[:width] = value
         if (value = attrs[:align])
           fragment[:align] = value.to_sym
-          fragment[:callback] = InlineTextAligner
+          (fragment[:callback] ||= []) << InlineTextAligner
         end
       end
       #if !fragment[:character_spacing] && (value = attrs[:character_spacing])
@@ -180,7 +206,7 @@ class Transform
           fragment[:anchor] = value
         elsif (value = attrs[:href])
           fragment[:link] = value.include?(';') ? value.gsub(CharRefRx) {
-            $2 ? CharEntityTable[$2.to_sym] : [$1.to_i].pack('U*')
+            $1 ? CharEntityTable[$1.to_sym] : [$2 ? $2.to_i : ($3.to_i 16)].pack('U1')
           } : value
         elsif (value = attrs[:name])
           # NOTE text is null character, which is used as placeholder text so Prawn doesn't drop fragment
@@ -188,12 +214,12 @@ class Transform
           if (type = attrs[:type])
             fragment[:type] = type.to_sym
           end
-          fragment[:callback] = InlineDestinationMarker
+          (fragment[:callback] ||= []) << InlineDestinationMarker
           visible = false
         end
       end
       # NOTE prefer old value, except for styles, which should be combined
-      fragment.update(@link_font_settings) {|k, old_v, new_v| k == :styles ? old_v.merge(new_v) : old_v } if visible
+      fragment.update(@theme_settings[:link]) {|k, oval, nval| k == :styles ? oval.merge(nval) : oval } if visible
     when :sub
       styles << :subscript
     when :sup

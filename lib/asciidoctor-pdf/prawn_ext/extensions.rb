@@ -2,13 +2,16 @@ Prawn::Font::AFM.instance_variable_set :@hide_m17n_warning, true
 
 require 'prawn/icon'
 
+Prawn::Icon::Compatibility.send :prepend, (::Module.new { def warning *args; end })
+
 module Asciidoctor
 module Prawn
 module Extensions
-  include ::Asciidoctor::Pdf::Measurements
-  include ::Asciidoctor::Pdf::Sanitizer
+  include ::Asciidoctor::PDF::Measurements
+  include ::Asciidoctor::PDF::Sanitizer
 
-  IconSets = ['fa', 'fi', 'octicon', 'pf'].to_set
+  FontAwesomeIconSets = %w(fab far fas)
+  IconSets = %w(fab far fas fi pf).to_set
   InitialPageContent = %(q\n)
 
   # - :height is the height of a line
@@ -36,7 +39,7 @@ module Extensions
 
   # Returns the effective (writable) width of the page
   #
-  # If inside a fixed-height bounding box, returns height of box.
+  # If inside a bounding box, returns width of box.
   #
   def effective_page_width
     reference_bounds.width
@@ -179,7 +182,7 @@ module Extensions
   #    bold: 'fonts/roboto-bold.ttf',
   #    bold_italic: 'fonts/roboto-bold_italic.ttf'
   #  }
-  #  
+  #
   def register_font data
     font_families.update data.inject({}) {|accum, (key, val)| accum[key.to_s] = val; accum }
   end
@@ -190,8 +193,11 @@ module Extensions
   #
   def font name = nil, options = {}
     if name
-      ::Prawn::Icon::FontData.load self, name if IconSets.include? name
       options = { size: options } if ::Numeric === options
+      if IconSets.include? name
+        ::Prawn::Icon::FontData.load self, name
+        options = options.reject {|k| k == :style } if options.key? :style
+      end
     end
     super name, options
   end
@@ -211,7 +217,7 @@ module Extensions
   end
 
   # Sets the font style for the scope of the block to which this method
-  # yields. If the style is nil and no block is given, return the current 
+  # yields. If the style is nil and no block is given, return the current
   # font style.
   #
   def font_style style = nil
@@ -303,6 +309,10 @@ module Extensions
     end
   end
 
+  def icon_font_data family
+    ::Prawn::Icon::FontData.load self, family
+  end
+
   def calc_line_metrics line_height = 1, font = self.font, font_size = self.font_size
     line_height_length = line_height * font_size
     leading = line_height_length - font_size
@@ -333,7 +343,7 @@ module Extensions
     options = options.dup
     if (format_option = options.delete :inline_format)
       format_option = [] unless ::Array === format_option
-      fragments = self.text_formatter.format string, *format_option 
+      fragments = self.text_formatter.format string, *format_option
     else
       fragments = [{text: string}]
     end
@@ -347,11 +357,19 @@ module Extensions
     end
   end
 
-  # Performs the same work as text except that the first_line_opts
-  # are applied to the first line of text renderered. It's necessary
-  # to use low-level APIs in this method so that we only style the
-  # first line and not the remaining lines (which is the default
-  # behavior in Prawn).
+  # NOTE override built-in draw_indented_formatted_line to insert leading before second line
+  def draw_indented_formatted_line string, opts
+    result = super
+    unless @no_text_printed || @all_text_printed
+      # as of Prawn 1.2.1, we have to handle the line gap after the first line manually
+      move_down opts[:leading]
+    end
+    result
+  end
+
+  # Performs the same work as Prawn::Text.text except that the first_line_opts are applied to the first line of text
+  # renderered. It's necessary to use low-level APIs in this method so we only style the first line and not the
+  # remaining lines (which is the default behavior in Prawn).
   def text_with_formatted_first_line string, first_line_opts, opts
     color = opts.delete :color
     fragments = parse_text string, opts
@@ -368,17 +386,27 @@ module Extensions
     first_line_opts = opts.merge(first_line_opts).merge single_line: true
     box = ::Prawn::Text::Formatted::Box.new fragments, first_line_opts
     # NOTE get remaining_fragments before we add color to fragments on first line
-    remaining_fragments = box.render dry_run: true
+    if (text_indent = opts.delete :indent_paragraphs)
+      remaining_fragments = indent text_indent do
+        box.render dry_run: true
+      end
+    else
+      remaining_fragments = box.render dry_run: true
+    end
     # NOTE color must be applied per-fragment
     if first_line_color
       fragments.each {|fragment| fragment[:color] ||= first_line_color}
     end
-    fill_formatted_text_box fragments, first_line_opts
+    if text_indent
+      indent text_indent do
+        fill_formatted_text_box fragments, first_line_opts
+      end
+    else
+      fill_formatted_text_box fragments, first_line_opts
+    end
     unless remaining_fragments.empty?
       # NOTE color must be applied per-fragment
-      if color
-        remaining_fragments.each {|fragment| fragment[:color] ||= color }
-      end
+      remaining_fragments.each {|fragment| fragment[:color] ||= color } if color
       # as of Prawn 1.2.1, we have to handle the line gap after the first line manually
       move_down opts[:leading]
       remaining_fragments = fill_formatted_text_box remaining_fragments, opts
@@ -720,20 +748,18 @@ module Extensions
     nil
   end
 
-  # Create a new page for the specified image. If the
-  # canvas option is true, the image is stretched to the
-  # edges of the page (full coverage).
+  # Create a new page for the specified image. If the canvas option is true,
+  # the image is positioned relative to the boundaries of the page.
   def image_page file, options = {}
     start_new_page_discretely
-    if options[:canvas]
-      canvas do
-        image file, width: bounds.width, height: bounds.height
-      end
+    image_page_number = page_number
+    if options.delete :canvas
+      canvas { image file, ({ position: :center, vposition: :center }.merge options) }
     else
-      image file, fit: [bounds.width, bounds.height]
+      image file, (options.merge position: :center, vposition: :center, fit: [bounds.width, bounds.height])
     end
-    # FIXME shouldn't this be `go_to_page prev_page_number + 1`?
-    go_to_page page_count
+    # NOTE advance to new page just in case the image function threw off the cursor
+    go_to_page image_page_number
     nil
   end
 
@@ -791,7 +817,7 @@ module Extensions
       # TODO set scratch number on scratch document
       scratch
     else
-      warn 'asciidoctor: WARNING: no scratch prototype available; instantiating fresh scratch document'
+      logger.warn 'no scratch prototype available; instantiating fresh scratch document'
       ::Prawn::Document.new
     end
   end
@@ -842,7 +868,7 @@ module Extensions
     else
       started_new_page = false
     end
-    
+
     # HACK yield doesn't work here on JRuby (at least not when called from AsciidoctorJ)
     #yield remainder, started_new_page
     instance_exec(total_height, started_new_page, &block)

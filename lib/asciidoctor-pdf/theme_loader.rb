@@ -4,9 +4,14 @@ require_relative 'core_ext/ostruct'
 require_relative 'measurements'
 
 module Asciidoctor
-module Pdf
+module PDF
 class ThemeLoader
-  include ::Asciidoctor::Pdf::Measurements
+  include ::Asciidoctor::PDF::Measurements
+  if defined? ::Asciidoctor::Logging
+    include ::Asciidoctor::Logging
+  else
+    include ::Asciidoctor::LoggingShim
+  end
 
   DataDir = ::File.expand_path(::File.join(::File.dirname(__FILE__), '..', '..', 'data'))
   ThemesDir = ::File.join DataDir, 'themes'
@@ -14,9 +19,9 @@ class ThemeLoader
   DefaultThemePath = ::File.expand_path 'default-theme.yml', ThemesDir
   BaseThemePath = ::File.expand_path 'base-theme.yml', ThemesDir
 
-  VariableRx = /\$([a-z0-9_]+)/
-  LoneVariableRx = /^\$([a-z0-9_]+)$/
-  HexColorEntryRx = /^(?<k>[[:blank:]]*[[:graph:]]+): +(?!null$)(?<q>["']?)#?(?<v>\w{3,6})\k<q> *(?:#.*)?$/
+  VariableRx = /\$([a-z0-9_-]+)/
+  LoneVariableRx = /^\$([a-z0-9_-]+)$/
+  HexColorEntryRx = /^(?<k> *\p{Graph}+): +(?!null$)(?<q>["']?)(?<h>#)?(?<v>[a-f0-9]{3,6})\k<q> *(?:#.*)?$/
   MultiplyDivideOpRx = /(-?\d+(?:\.\d+)?) +([*\/]) +(-?\d+(?:\.\d+)?)/
   AddSubtractOpRx = /(-?\d+(?:\.\d+)?) +([+\-]) +(-?\d+(?:\.\d+)?)/
   PrecisionFuncRx = /^(round|floor|ceil)\(/
@@ -30,7 +35,7 @@ class ThemeLoader
 
   # A marker module for a normalized CMYK array
   # Prevents normalizing CMYK value more than once
-  module CmykColorValue
+  module CMYKColorValue
     include ColorValue
     def to_s
       %([#{join ', '}])
@@ -38,79 +43,89 @@ class ThemeLoader
   end
 
   def self.resolve_theme_file theme_name = nil, theme_path = nil
-    theme_name ||= 'default'
-    # if .yml extension is given, assume it's a full file name
-    if (theme_name.end_with? '.yml')
+    # if .yml extension is given, assume it's a path (don't append -theme.yml)
+    if ((theme_name ||= 'default').end_with? '.yml')
       # FIXME restrict to jail!
-      # QUESTION why are we not using expand_path in this case?
-      theme_path ? (::File.join theme_path, theme_name) : theme_name
+      theme_file = ::File.expand_path theme_name, theme_path
+      theme_path ||= ::File.dirname theme_file
     else
-      # QUESTION should we append '-theme.yml' or just '.yml'?
-      ::File.expand_path %(#{theme_name}-theme.yml), (theme_path || ThemesDir)
+      theme_file = ::File.expand_path %(#{theme_name}-theme.yml), (theme_path || (theme_path = ThemesDir))
     end
+    [theme_file, theme_path]
   end
 
-  def self.resolve_theme_asset asset_path, theme_path = nil
+  def self.resolve_theme_asset asset_path, theme_path
     ::File.expand_path asset_path, (theme_path || ThemesDir)
   end
 
   # NOTE base theme is loaded "as is" (no post-processing)
   def self.load_base_theme
-    ::OpenStruct.new(::SafeYAML.load_file BaseThemePath)
+    (::OpenStruct.new ::SafeYAML.load_file BaseThemePath).tap {|theme| theme.__dir__ = ThemesDir }
   end
 
-  def self.load_theme theme_name = nil, theme_path = nil, opts = {}
-    if (theme_file = resolve_theme_file theme_name, theme_path) == BaseThemePath ||
-        (theme_file != DefaultThemePath && (opts.fetch :apply_base_theme, true))
-      theme_data = load_base_theme
-    else
-      theme_data = nil
-    end
-
+  def self.load_theme theme_name = nil, theme_path = nil
+    theme_file, theme_path = resolve_theme_file theme_name, theme_path
     if theme_file == BaseThemePath
-      theme_data
+      load_base_theme
     else
-      load_file theme_file, theme_data
+      theme_data = load_file theme_file, nil, theme_path
+      unless theme_file == DefaultThemePath
+        # QUESTION should we enforce any other fallback values?
+        theme_data.base_align ||= 'left'
+        theme_data.code_font_family ||= (theme_data.literal_font_family || 'Courier')
+        theme_data.conum_font_family ||= (theme_data.literal_font_family || 'Courier')
+      end
+      theme_data.__dir__ = theme_path
+      theme_data
     end
   end
 
-  def self.load_file filename, theme_data = nil
-    raw_data = (::IO.read filename, encoding: ::Encoding::UTF_8).each_line.map {|l| l.sub HexColorEntryRx, '\k<k>: \'\k<v>\'' }.join
-    self.new.load((::SafeYAML.load raw_data), theme_data)
-  end
-
-  def load hash, theme_data = nil
-    theme_data ||= ::OpenStruct.new
-    return theme_data unless ::Hash === hash
-    hash.inject(theme_data) {|data, (key, val)| process_entry key, val, data }
-    # NOTE remap legacy running content keys (e.g., header_recto_content_left => header_recto_left_content)
-    %w(header_recto header_verso footer_recto footer_verso).each do |periphery_face|
-      %w(left center right).each do |align|
-        if (val = theme_data.delete %(#{periphery_face}_content_#{align}))
-          theme_data[%(#{periphery_face}_#{align}_content)] = val
+  def self.load_file filename, theme_data = nil, theme_path = nil
+    data = ::File.read filename, encoding: ::Encoding::UTF_8
+    data = data.each_line.map {|l|
+      l.sub(HexColorEntryRx) { %(#{(m = $~)[:k]}: #{m[:h] || (m[:k].end_with? 'color') ? "'#{m[:v]}'" : m[:v]}) }
+    }.join unless filename == DefaultThemePath
+    yaml_data = ::SafeYAML.load data
+    if ::Hash === yaml_data && (yaml_data.key? 'extends')
+      if (extends = yaml_data.delete 'extends')
+        [*extends].each do |extend_file|
+          if extend_file == 'base'
+            theme_data = theme_data ? (::OpenStruct.new theme_data.to_h.merge load_base_theme.to_h) : load_base_theme
+            next
+          elsif extend_file == 'default' || extend_file == 'default-with-fallback-font'
+            extend_file, extend_theme_path = resolve_theme_file extend_file
+          elsif extend_file.start_with? './'
+            extend_file, extend_theme_path = resolve_theme_file extend_file, (::File.dirname filename)
+          else
+            extend_file, extend_theme_path = resolve_theme_file extend_file, theme_path
+          end
+          theme_data = load_file extend_file, theme_data, extend_theme_path
         end
       end
+    else
+      theme_data ||= (filename == DefaultThemePath ? nil : load_base_theme)
     end
-    theme_data.base_align ||= 'left'
-    # QUESTION should we do any other post-load calculations or defaults?
-    theme_data
+    self.new.load yaml_data, theme_data, theme_path
+  end
+
+  def load hash, theme_data = nil, theme_path = nil
+    ::Hash === hash ? hash.reduce(theme_data || ::OpenStruct.new) {|data, (key, val)| process_entry key, val, data } : (theme_data || ::OpenStruct.new)
   end
 
   private
 
   def process_entry key, val, data
-    if key.start_with? 'font_'
+    key = key.tr '-', '_' if key.include? '-'
+    if key == 'font_catalog' || key == 'font_fallbacks'
       data[key] = val
     elsif key.start_with? 'admonition_icon_'
       data[key] = (val || {}).map do |(key2, val2)|
         [key2.to_sym, (key2.end_with? '_color') ? to_color(evaluate val2, data) : (evaluate val2, data)]
       end.to_h
     elsif ::Hash === val
-      val.each do |key2, val2|
-        process_entry %(#{key}_#{key2.tr '-', '_'}), val2, data
-      end
+      val.each {|subkey, subval| process_entry %(#{key}_#{subkey}), subval, data }
     elsif key.end_with? '_color'
-      # QUESTION do we need to evaluate_math in this case?
+      # QUESTION do we really need to evaluate_math in this case?
       data[key] = to_color(evaluate val, data)
     elsif %(#{key.chomp '_'}_).include? '_content_'
       data[key] = (expand_vars val.to_s, data).to_s
@@ -135,21 +150,27 @@ class ThemeLoader
   def expand_vars expr, vars
     if (idx = (expr.index '$'))
       if idx == 0 && expr =~ LoneVariableRx
-        if vars.respond_to? $1
-          vars[$1]
+        if (key = $1).include? '-'
+          key = key.tr '-', '_'
+        end
+        if vars.respond_to? key
+          vars[key]
         else
-          warn %(asciidoctor: WARNING: unknown variable reference in PDF theme: $#{$1})
+          logger.warn %(unknown variable reference in PDF theme: $#{$1})
           expr
         end
       else
-        expr.gsub(VariableRx) {
-          if vars.respond_to? $1
-            vars[$1]
+        expr.gsub(VariableRx) do
+          if (key = $1).include? '-'
+            key = key.tr '-', '_'
+          end
+          if vars.respond_to? key
+            vars[key]
           else
-            warn %(asciidoctor: WARNING: unknown variable reference in PDF theme: $#{$1})
+            logger.warn %(unknown variable reference in PDF theme: $#{$1})
             $&
           end
-        }
+        end
       end
     else
       expr
@@ -163,16 +184,24 @@ class ThemeLoader
     # NOTE leave % as a string; handled by converter for now
     expr = resolve_measurement_values(original = expr)
     while true
-      result = expr.gsub(MultiplyDivideOpRx) { $1.to_f.send $2.to_sym, $3.to_f }
-      unchanged = (result == expr)
-      expr = result
-      break if unchanged
+      if (expr.count '*/') > 0
+        result = expr.gsub(MultiplyDivideOpRx) { $1.to_f.send $2.to_sym, $3.to_f }
+        unchanged = (result == expr)
+        expr = result
+        break if unchanged
+      else
+        break
+      end
     end
     while true
-      result = expr.gsub(AddSubtractOpRx) { $1.to_f.send $2.to_sym, $3.to_f }
-      unchanged = (result == expr)
-      expr = result
-      break if unchanged
+      if (expr.count '+-') > 0
+        result = expr.gsub(AddSubtractOpRx) { $1.to_f.send $2.to_sym, $3.to_f }
+        unchanged = (result == expr)
+        expr = result
+        break if unchanged
+      else
+        break
+      end
     end
     if (expr.end_with? ')') && expr =~ PrecisionFuncRx
       op = $1
@@ -191,13 +220,6 @@ class ThemeLoader
     when ColorValue
       # already converted
       return value
-    when ::String
-      if value == 'transparent'
-        # FIXME should we have a TransparentColorValue class?
-        return HexColorValue.new value
-      elsif value.length == 6
-        return HexColorValue.new value.upcase
-      end
     when ::Array
       case value.length
       # CMYK value
@@ -216,19 +238,30 @@ class ThemeLoader
         when [100, 100, 100, 100]
           return HexColorValue.new '000000'
         else
-          value.extend CmykColorValue
+          value.extend CMYKColorValue
           return value
         end
       # RGB value
       when 3
-        return HexColorValue.new value.map {|e| '%02X' % e}.join
+        return HexColorValue.new value.map {|e| '%02X' % e }.join
       # Nonsense array value; flatten to string
       else
         value = value.join
       end
+    when ::String
+      if value == 'transparent'
+        # FIXME should we have a TransparentColorValue class?
+        return HexColorValue.new value
+      elsif value.length == 6
+        return HexColorValue.new value.upcase
+      end
+    when ::NilClass
+      return nil
     else
-      # Unknown type; coerce to a string
-      value = value.to_s
+      # Unknown type (usually Integer); coerce to String
+      if (value = value.to_s).length == 6
+        return HexColorValue.new value.upcase
+      end
     end
     value = case value.length
     when 6
