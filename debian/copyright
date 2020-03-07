@@ -6,11 +6,11 @@ Files: *
 Copyright: 2014-2018 OpenDevise Inc. and the Asciidoctor Project
 License: MIT
 
-Files: lib/asciidoctor-pdf/prawn_ext/coderay_encoder.rb
+Files: lib/asciidoctor/pdf/prawn_ext/coderay_encoder.rb
 Copyright: 2014 Felipe Doria
 License: MIT
 
-Files: lib/asciidoctor-pdf/roman_numeral.rb
+Files: lib/asciidoctor/pdf/roman_numeral.rb
 Copyright: 2011 Andrew Vos
 	   2014 OpenDevice, Inc.
 License: MIT
