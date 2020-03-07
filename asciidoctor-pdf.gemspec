@@ -29,28 +29,29 @@ Gem::Specification.new do |s|
     files = Dir['**/*']
   end
   s.files = files.grep %r/^(?:(?:data|lib)\/.+|docs\/theming-guide\.adoc|(?:CHANGELOG|LICENSE|NOTICE|README)\.adoc|\.yardopts|#{s.name}\.gemspec)$/
-  # FIXME optimize-pdf is currently a shell script, so listing it here won't work
-  #s.executables = (files.grep %r/^bin\//).map {|f| File.basename f }
-  s.executables = ['asciidoctor-pdf']
+  s.executables = (files.grep %r/^bin\//).map {|f| File.basename f }
   s.require_paths = ['lib']
   #s.test_files = files.grep %r/^(?:test|spec|feature)\/.*$/
 
   s.add_runtime_dependency 'asciidoctor', '>= 1.5.3', '< 3.0.0'
   s.add_runtime_dependency 'prawn', '~> 2.2.0'
+  # NOTE ttfunk 1.6 generates TT instructions ghostscript cannot process, so lock the version of ttfunk
+  s.add_runtime_dependency 'ttfunk', ['~> 1.5.0'], ['>= 1.5.1']
+  # NOTE must use prawn-table from master branch (defined in Gemfile) for full functionality
   s.add_runtime_dependency 'prawn-table', '~> 0.2.0'
   s.add_runtime_dependency 'prawn-templates', '~> 0.1.0'
-  s.add_runtime_dependency 'prawn-svg', '~> 0.29.0'
-  s.add_runtime_dependency 'prawn-icon', '~> 2.3.0'
+  s.add_runtime_dependency 'prawn-svg', '~> 0.30.0'
+  s.add_runtime_dependency 'prawn-icon', '~> 2.5.0'
   s.add_runtime_dependency 'safe_yaml', '~> 1.0.0'
   s.add_runtime_dependency 'thread_safe', '~> 0.3.0'
   s.add_runtime_dependency 'concurrent-ruby', '~> 1.1.0'
-  # For our usage, treetop 1.6 is slower than treetop 1.5
-  s.add_runtime_dependency 'treetop', '~> 1.5.0'
+  s.add_runtime_dependency 'treetop', '~> 1.6.0'
 
-  s.add_development_dependency 'rake', '~> 12.3.0'
-  # Asciidoctor PDF supports Rouge >= 2; Rouge 3.4.1 emits a superfluous warning in verbose mode
-  s.add_development_dependency 'rouge', '~> 3.4.0', '!= 3.4.1'
-  s.add_development_dependency 'rspec', '~> 3.8.0'
+  s.add_development_dependency 'rake', '~> 13.0.0'
+  s.add_development_dependency 'rspec', '~> 3.9.0'
   s.add_development_dependency 'pdf-inspector', '~> 1.3.0'
+  # Asciidoctor PDF supports Rouge >= 2 (verified in CI build using 2.0.0)
+  s.add_development_dependency 'rouge', '~> 3.0'
+  s.add_development_dependency 'coderay', '~> 1.1.0'
   s.add_development_dependency 'chunky_png', '~> 1.3.0'
 end

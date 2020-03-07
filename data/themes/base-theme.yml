@@ -3,6 +3,7 @@
 vertical_spacing: 12
 page_background_color: 'FFFFFF'
 page_layout: portrait
+page_initial_zoom: FitH
 # 36 is equivalent to 0.5in
 page_margin: 36
 page_margin_inner: 48
@@ -15,15 +16,23 @@ base_font_color: '000000'
 base_font_family: Helvetica
 base_font_size: 12
 # QUESTION should we rename to min_font_size?
-base_font_size_min: 9
+base_font_size_min: 6
 base_font_style: normal
 base_line_height: 1.15
-base_line_height_length: 13.8
 base_border_color: 'EEEEEE'
 base_border_width: 0.5
+role_line-through_text_decoration: line-through
+role_underline_text_decoration: underline
+role_big_font_size: 14
+role_small_font_size: 10
+role_subtitle_font_size: 0.8em
 button_content: '[%s]'
 button_font_family: Courier
 button_font_style: bold
+key_font_family: Courier
+key_font_style: italic
+mark_background_color: ffff00
+mark_border_offset: 1
 link_font_color: '0000EE'
 literal_font_family: Courier
 heading_font_style: bold
@@ -36,6 +45,7 @@ heading_h6_font_size: 10
 heading_line_height: 1.15
 heading_margin_top: 4
 heading_margin_bottom: 12
+heading_min_height_after: 20
 title_page_align: center
 title_page_line_height: 1.15
 title_page_logo_top: 10%
@@ -65,15 +75,19 @@ admonition_padding: [0, 12, 0, 12]
 admonition_label_font_style: bold
 admonition_label_text_transform: uppercase
 blockquote_border_color: 'EEEEEE'
-blockquote_border_width: 4
+blockquote_border_left_width: 4
 blockquote_padding: [6, 12, -6, 14]
+verse_border_color: 'EEEEEE'
+verse_border_left_width: 4
+verse_padding: [6, 12, -6, 14]
 code_font_family: Courier
-code_font_size: 10.5
+code_font_size: 10.8
 code_line_height: 1.2
 code_padding: 9
 code_border_color: 'EEEEEE'
 code_border_width: 0.5
 conum_line_height: 1.15
+conum_glyphs: circled
 example_background_color: 'FFFFFF'
 example_border_color: 'EEEEEE'
 example_border_width: 0.5
@@ -101,3 +115,7 @@ thematic_break_border_style: solid
 thematic_break_border_width: 0.5
 toc_indent: 15
 toc_line_height: 1.4
+footnotes_font_size: 9
+footnotes_item_space: 3
+footer_recto_right_content: '{page-number}'
+footer_verso_left_content: '{page-number}'

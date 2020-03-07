@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'spec_helper'
 
 describe 'Asciidoctor::PDF::Converter - Index' do
@@ -16,7 +18,7 @@ describe 'Asciidoctor::PDF::Converter - Index' do
     == Chapter About Cats
 
     We know that ((cats)) control the internet.
-    But they sort run nature too.
+    But they sort of run nature too.
     (((cats,big cats,lion)))
     After all, the ((king of the jungle)) is the lion, which is a big cat.
 
@@ -51,6 +53,60 @@ describe 'Asciidoctor::PDF::Converter - Index' do
     K
     king of the jungle, 1
     EOS
+  end
+
+  it 'should not add index entries in delimited block to index twice' do
+    pdf = to_pdf <<~'EOS', doctype: :book, analyze: true
+    = Document Title
+
+    == Chapter about Cats
+
+    We know that ((cats)) control the internet.
+    But they sort of run nature too.
+    (((cats,big cats,lion)))
+    After all, the ((king of the jungle)) is the lion, which is a big cat.
+
+    .Dogs
+    ****
+    Cats may rule, well, everything.
+    But ((dogs)) are a human's best friend.
+    ****
+
+    [index]
+    == Index
+    EOS
+
+    index_text = pdf.find_text string: 'Index', page_number: 3, font_size: 22
+    (expect index_text).to have_size 1
+    (expect pdf.lines).to include 'dogs, 1'
+  end
+
+  it 'should create link from entry in index to location of term' do
+    input = <<~'EOS'
+    = Document Title
+    :doctype: book
+
+    == Chapter About Dogs
+
+    Cats may rule, well, everything.
+    But ((dogs)) are a human's best friend.
+
+    [index]
+    == Index
+    EOS
+
+    pdf = to_pdf input, analyze: true
+    dogs_text = (pdf.find_text 'dogs are a human’s best friend.')[0]
+
+    pdf = to_pdf input
+    annotations = get_annotations pdf, 3
+    (expect annotations).to have_size 1
+    dest = annotations[0][:Dest]
+    names = get_names pdf
+    (expect names).to have_key dest
+    (expect pdf.objects[names[dest]][2]).to eql dogs_text[:x]
+    term_pgnum = get_page_number pdf, pdf.objects[pdf.objects[names[dest]][0]]
+    (expect term_pgnum).to be 2
   end
 
   it 'should not assign number or chapter label to index section' do
@@ -175,6 +231,34 @@ describe 'Asciidoctor::PDF::Converter - Index' do
     EOS
   end
 
+  it 'should sort terms in index, ignoring case' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    = Document Title
+    :doctype: book
+
+    == Chapter A
+
+    ((AsciiDoc)) is a lightweight markup language.
+    It is used for content ((authoring)).
+
+    == Chapter B
+
+    ((Asciidoctor)) is an AsciiDoc processor.
+
+    == Chapter C
+
+    If an element has an ((anchor)), you can link to it.
+
+    [index]
+    == Index
+    EOS
+
+    index_pagenum = (pdf.find_text 'Index')[0][:page_number]
+    index_page_lines = pdf.lines pdf.find_text page_number: index_pagenum
+    terms = index_page_lines.select {|it| it.include? ',' }.map {|it| (it.split ',', 2)[0] }
+    (expect terms).to eql %w(anchor AsciiDoc Asciidoctor authoring)
+  end
+
   it 'should not combine range if same index entry occurs on sequential pages when media is screen' do
     pdf = to_pdf <<~'EOS', doctype: :book, analyze: true
     = Document Title
@@ -199,7 +283,7 @@ describe 'Asciidoctor::PDF::Converter - Index' do
   end
 
   it 'should combine range if same index entry occurs on sequential pages when media is not screen' do
-    pdf = to_pdf <<~'EOS', doctype: :book, attributes: { 'media' => 'print', 'nofooter' => '' }, analyze: true
+    pdf = to_pdf <<~'EOS', doctype: :book, attribute_overrides: { 'media' => 'print' }, analyze: true
     = Document Title
 
     == First Chapter
@@ -219,5 +303,25 @@ describe 'Asciidoctor::PDF::Converter - Index' do
     EOS
 
     (expect (pdf.lines pdf.find_text page_number: 5).join ?\n).to include 'coming soon, 1-3'
+  end
+
+  it 'should apply hanging indent to wrapped lines equal to twice level indent' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    = Document Title
+    :doctype: book
+
+    text(((searching,for fun and profit)))(((searching,when you have absolutely no clue where to begin)))
+
+    [index]
+    == Index
+    EOS
+
+    searching_text = (pdf.find_text page_number: 3, string: 'searching')[0]
+    fun_profit_text = (pdf.find_text page_number: 3, string: /^for fun/)[0]
+    begin_text = (pdf.find_text page_number: 3, string: /^begin/)[0]
+    left_margin = searching_text[:x]
+    level_indent = fun_profit_text[:x] - left_margin
+    hanging_indent = begin_text[:x] - fun_profit_text[:x]
+    (expect hanging_indent.round).to eql (level_indent * 2).round
   end
 end

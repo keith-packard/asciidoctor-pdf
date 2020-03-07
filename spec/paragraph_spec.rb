@@ -1,17 +1,20 @@
+# frozen_string_literal: true
+
 require_relative 'spec_helper'
 
 describe 'Asciidoctor::PDF::Converter - Paragraph' do
-  it 'should normalize whitespace' do
+  it 'should normalize newlines and whitespace' do
     pdf = to_pdf <<~EOS, analyze: true
     He's  a  real  nowhere  man,
     Sitting in his nowhere land,
     Making all his nowhere plans\tfor nobody.
     EOS
-    text = pdf.text
-    (expect text).to have_size 1
+    (expect pdf.text).to have_size 1
+    text = pdf.text[0][:string]
     (expect text).not_to include '  '
     (expect text).not_to include ?\t
     (expect text).not_to include ?\n
+    (expect text).to include 'man, Sitting'
   end
 
   it 'should indent first line of paragraph if prose_text_indent key is set in theme' do
@@ -20,6 +23,30 @@ describe 'Asciidoctor::PDF::Converter - Paragraph' do
     (expect pdf.text).to have_size 4
     (expect pdf.text[0][:x]).to be > pdf.text[1][:x]
     (expect pdf.text[2][:x]).to be > pdf.text[3][:x]
+  end
+
+  it 'should not alter line height of wrapped lines when prose_text_indent is set in theme that uses a TTF font' do
+    input = lorem_ipsum '4-sentences-2-paragraphs'
+
+    pdf = to_pdf input, analyze: true
+
+    last_line_y = pdf.text[-1][:y]
+
+    pdf = to_pdf input, pdf_theme: { prose_text_indent: 18 }, analyze: true
+
+    (expect pdf.text[-1][:y]).to eql last_line_y
+  end
+
+  it 'should not alter line height of wrapped lines when prose_text_indent is set in theme that uses an AFM font' do
+    input = lorem_ipsum '4-sentences-2-paragraphs'
+
+    pdf = to_pdf input, pdf_theme: { extends: 'base' }, analyze: true
+
+    last_line_y = pdf.text[-1][:y]
+
+    pdf = to_pdf input, pdf_theme: { extends: 'base', prose_text_indent: 18 }, analyze: true
+
+    (expect pdf.text[-1][:y]).to eql last_line_y
   end
 
   it 'should use prose_margin_inner between paragraphs when prose-text_indent key is set in theme' do
@@ -49,18 +76,6 @@ describe 'Asciidoctor::PDF::Converter - Paragraph' do
     center_x = (pdf.page 1)[:size][1] / 2
     paragraph_text = (pdf.find_text 'right-aligned')[0]
     (expect paragraph_text[:x]).to be > center_x
-  end
-
-  it 'should not alter line height of wrapped lines when prose_text_indent is set in theme' do
-    input = lorem_ipsum '4-sentences-2-paragraphs'
-
-    pdf = to_pdf input, analyze: true
-
-    last_line_y = pdf.text[-1][:y]
-
-    pdf = to_pdf input, pdf_theme: { prose_text_indent: 18 }, analyze: true
-
-    (expect pdf.text[-1][:y]).to eql last_line_y
   end
 
   it 'should indent first line of abstract if prose_text_indent key is set in theme' do
@@ -95,11 +110,34 @@ describe 'Asciidoctor::PDF::Converter - Paragraph' do
     abstract_text_line1 = pdf.find_text 'First line of abstract.'
     abstract_text_line2 = pdf.find_text 'Second line of abstract.'
     (expect abstract_text_line1).to have_size 1
-    (expect abstract_text_line1[0][:order]).to eql 2
+    (expect abstract_text_line1[0][:order]).to be 2
     (expect abstract_text_line1[0][:font_name]).to include 'BoldItalic'
     (expect abstract_text_line2).to have_size 1
-    (expect abstract_text_line2[0][:order]).to eql 3
+    (expect abstract_text_line2[0][:order]).to be 3
     (expect abstract_text_line2[0][:font_name]).not_to include 'BoldItalic'
+  end
+
+  it 'should use consistent spacing between lines in abstract when theme uses AFM font' do
+    pdf = to_pdf <<~'EOS', pdf_theme: { extends: 'base', abstract_first_line_font_color: 'AA0000' }, analyze: true
+    = Document Title
+
+    [abstract]
+    First line of abstract. +
+    Second line of abstract. +
+    Third line of abstract.
+
+    == Section
+
+    content
+    EOS
+
+    abstract_text_line1 = (pdf.find_text 'First line of abstract.')[0]
+    abstract_text_line2 = (pdf.find_text 'Second line of abstract.')[0]
+    abstract_text_line3 = (pdf.find_text 'Third line of abstract.')[0]
+    line1_line2_gap = abstract_text_line1[:y] - abstract_text_line2[:y]
+    line2_line3_gap = abstract_text_line2[:y] - abstract_text_line3[:y]
+    (expect abstract_text_line1[:font_color]).to eql 'AA0000'
+    (expect line1_line2_gap).to eql line2_line3_gap
   end
 
   it 'should decorate first line of abstract when abstract has single line' do
@@ -116,7 +154,77 @@ describe 'Asciidoctor::PDF::Converter - Paragraph' do
 
     abstract_text = pdf.find_text 'First and only line of abstract.'
     (expect abstract_text).to have_size 1
-    (expect abstract_text[0][:order]).to eql 2
+    (expect abstract_text[0][:order]).to be 2
     (expect abstract_text[0][:font_name]).to include 'BoldItalic'
+  end
+
+  it 'should honor text alignment role on abstract paragraph' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    = Document Title
+
+    [abstract.text-right]
+    Enter stage right.
+
+    == Section
+
+    content
+    EOS
+
+    halfway_point = (pdf.page 1)[:size][0] * 0.5
+    abstract_text = pdf.find_text 'Enter stage right.'
+    (expect abstract_text).to have_size 1
+    (expect abstract_text[0][:x]).to be > halfway_point
+  end
+
+  it 'should honor text alignment role on nested abstract paragraph' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    = Document Title
+
+    [abstract]
+    --
+    [.text-right]
+    Enter stage right.
+
+    Mirror, stage left.
+    --
+
+    == Section
+
+    content
+    EOS
+
+    halfway_point = (pdf.page 1)[:size][0] * 0.5
+    abstract_text1 = pdf.find_text 'Enter stage right.'
+    (expect abstract_text1).to have_size 1
+    (expect abstract_text1[0][:x]).to be > halfway_point
+    abstract_text2 = pdf.find_text 'Mirror, stage left.'
+    (expect abstract_text2).to have_size 1
+    (expect abstract_text2[0][:x]).to be < halfway_point
+  end
+
+  it 'should apply same line height to all paragraphs in abstract' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    = Document Title
+
+    [abstract]
+    --
+    paragraph 1, line 1 +
+    paragraph 1, line 2
+
+    paragraph 2, line 1 +
+    paragraph 2, line 2
+    --
+
+    == Section
+
+    content
+    EOS
+
+    p1_l1_text = (pdf.find_text 'paragraph 1, line 1')[0]
+    p1_l2_text = (pdf.find_text 'paragraph 1, line 2')[0]
+    p2_l1_text = (pdf.find_text 'paragraph 2, line 1')[0]
+    p2_l2_text = (pdf.find_text 'paragraph 2, line 2')[0]
+
+    (expect p2_l1_text[:y] - p2_l2_text[:y]).to eql p1_l1_text[:y] - p1_l2_text[:y]
   end
 end

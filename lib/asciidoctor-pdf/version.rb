@@ -1,6 +1,3 @@
-module Asciidoctor
-module PDF
-  VERSION = '1.5.0.beta.1'
-end
-Pdf = PDF unless const_defined? :Pdf, false
-end
+# frozen_string_literal: true
+
+require_relative '../asciidoctor/pdf/version'

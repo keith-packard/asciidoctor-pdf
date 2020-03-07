@@ -1,9 +1,39 @@
+# frozen_string_literal: true
+
+require_relative 'ignore-gem-warnings' if $VERBOSE
+if ENV['COVERAGE'] == 'deep'
+  ENV['DEEP_COVER'] = 'true'
+  require 'deep_cover'
+elsif ENV['COVERAGE'] == 'true'
+  require 'deep_cover/builtin_takeover'
+  require 'simplecov'
+end
+
+# TODO: remove once support for Ruby 2.3 is dropped
+if (ENV.key? 'APPVEYOR') && (RbConfig::CONFIG['host_os'].include? 'mingw') && (Gem::Version.new RUBY_VERSION) < (Gem::Version.new '2.4.0')
+  require 'openssl'
+  OpenSSL::SSL.send :remove_const, :VERIFY_PEER
+  OpenSSL::SSL::VERIFY_PEER = OpenSSL::SSL::VERIFY_NONE
+end
+
 require 'asciidoctor/pdf'
 require 'base64'
 require 'chunky_png'
+require 'fileutils' unless defined? FileUtils
 require 'open3' unless defined? Open3
 require 'pathname' unless defined? Pathname
 require 'pdf/inspector'
+require 'socket'
+
+Asciidoctor.autoload :Extensions, 'asciidoctor/extensions' unless defined? Asciidoctor::LoggerManager
+
+# NOTE fix invalid bits for PNG in Gmagick
+Gmagick.prepend (Module.new do
+  def initialize image_blob
+    super
+    @bits = [@bits, 8].max
+  end
+end) if defined? ::GMagick::Image
 
 # NOTE fix warning in Prawn::Font:TTF
 Prawn::Font::TTF.prepend (Module.new do
@@ -74,11 +104,10 @@ class EnhancedPDFTextInspector < PDF::Inspector
 
   def lines text = @text
     prev_y = nil
-    text.reduce [] do |accum, it|
+    text.each_with_object [] do |it, accum|
       current_line = prev_y && (prev_y - it[:y]).abs < 6 ? accum.pop : ''
       accum << %(#{current_line}#{it[:string]})
       prev_y = it[:y]
-      accum
     end
   end
 
@@ -97,11 +126,18 @@ class EnhancedPDFTextInspector < PDF::Inspector
     end
   end
 
+  # Tf
   def set_text_font_and_size *params
     @state.set_text_font_and_size(*params)
     @font_settings = { name: @fonts[params[0]], size: params[1], color: @color }
   end
 
+  # scn (used for font color in SVG)
+  def set_color_for_nonstroking_and_special *params
+    @color = params.map {|it| '%02X' % (it.to_f * 255).round }.join
+  end
+
+  # SCN
   def set_color_for_stroking_and_special *params
     @color = params.map {|it| '%02X' % (it.to_f * 255).round }.join
   end
@@ -115,6 +151,11 @@ class EnhancedPDFTextInspector < PDF::Inspector
   end
 
   def show_text text, kerned = false
+    # NOTE this may be a rough approximation
+    text_width = (@state.current_font.unpack text).reduce 0 do |width, code|
+      width + (@state.current_font.glyph_width code) * @font_settings[:size] / 1000.0
+    end
+
     string = @state.current_font.to_utf8 text
     if @cursor
       accum = @cursor
@@ -123,13 +164,44 @@ class EnhancedPDFTextInspector < PDF::Inspector
       accum[:font_size] = @font_settings[:size]
       accum[:font_color] = @font_settings[:color]
       accum[:string] = string
+      accum[:width] = text_width
       @text << accum
       @pages[-1][:text] << accum
       @cursor = nil
     else
       (accum = @text[-1])[:string] += string
+      accum[:width] += text_width
     end
     accum[:kerned] ||= kerned
+  end
+end
+
+class ImageInspector < PDF::Inspector
+  attr_reader :images
+
+  def initialize
+    @images = []
+    @x = @y = @width = @height = nil
+    @page_number = 1
+  end
+
+  def page= page
+    @page_number = page.number
+    @image_xobjects = page.xobjects.each_with_object({}) do |(name, xobject), accum|
+      accum[name] = xobject if xobject.hash[:Subtype] == :Image
+    end
+  end
+
+  def concatenate_matrix width, _p2, _p3, height, x, y
+    @width = width
+    @height = height
+    @x = x
+    @y = y + height
+  end
+
+  def invoke_xobject name
+    image_info = (image = @image_xobjects[name]).hash
+    @images << { name: name, page_number: @page_number, x: @x, y: @y, width: @width, height: @height, implicit_height: image_info[:Height], implicit_width: image_info[:Width], data: image.data }
   end
 end
 
@@ -143,14 +215,29 @@ class LineInspector < PDF::Inspector
     @graphic_states = {}
     @page_number = 1
     @width = nil
+    @style = :solid
+  end
+
+  def append_curved_segment *args
+    x, y = args.pop 2
+    @from = { x: x, y: y }
   end
 
   def append_line x, y
-    @lines << { page_number: @page_number, from: @from, to: { x: x, y: y }, color: @color, width: @width }
+    @lines << { page_number: @page_number, from: @from, to: { x: x, y: y }, color: @color, width: @width, style: @style } unless @color.nil? && @width.nil?
+    @from = { x: x, y: y }
   end
 
   def begin_new_subpath x, y
     @from = { x: x, y: y }
+  end
+
+  def close_subpath
+    @from = nil
+  end
+
+  def stroke_path
+    @width = nil
   end
 
   def page= page
@@ -158,16 +245,35 @@ class LineInspector < PDF::Inspector
     @graphic_states = page.graphic_states
   end
 
+  # SCN
   def set_color_for_stroking_and_special *params
     @color = params.map {|it| '%02X' % (it.to_f * 255).round }.join
   end
 
+  # gs
   def set_graphics_state_parameters ref
     if (opacity = @graphic_states[ref][:ca])
       @color += '%02X' % (opacity * 255).round
     end
   end
 
+  # d
+  def set_line_dash a, _b
+    if a.empty?
+      @style = :solid
+    else
+      gap, len = a
+      if gap == len
+        @style = :dashed
+      elsif gap < len
+        @style = :dotted
+      else
+        @style = :solid
+      end
+    end
+  end
+
+  # w
   def set_line_width line_width
     @width = line_width
   end
@@ -175,11 +281,12 @@ end
 
 RSpec.configure do |config|
   config.before :suite do
-    FileUtils.mkdir_p output_dir
+    FileUtils.rm_r output_dir, force: true, secure: true
+    FileUtils.mkdir output_dir
   end
 
   config.after :suite do
-    FileUtils.rm_r output_dir, force: true, secure: true unless ENV.key? 'DEBUG'
+    FileUtils.rm_r output_dir, force: true, secure: true unless (ENV.key? 'DEBUG') || config.reporter.failed_examples.find {|it| it.metadata[:visual] }
   end
 
   def asciidoctor_2_or_better?
@@ -190,18 +297,21 @@ RSpec.configure do |config|
     defined? Asciidoctor::LoggerManager
   end
 
-  def asciidoctor_pdf_bin opts = {}
-    bin_path = File.join __dir__, '..', 'bin', 'asciidoctor-pdf'
-    if opts.fetch :with_ruby, true
-      ruby = File.join RbConfig::CONFIG['bindir'], RbConfig::CONFIG['ruby_install_name']
-      if (ruby_opts = opts[:ruby_opts])
-        [ruby, *ruby_opts, bin_path]
-      else
-        [ruby, bin_path]
-      end
-    else
-      bin_path
-    end
+  def bin_script name, opts = {}
+    bin_path = Gem.bin_path (opts.fetch :gem, 'asciidoctor-pdf'), name
+    windows? ? [Gem.ruby, bin_path] : bin_path
+  end
+
+  def asciidoctor_bin
+    bin_script 'asciidoctor', gem: 'asciidoctor'
+  end
+
+  def asciidoctor_pdf_bin
+    bin_script 'asciidoctor-pdf'
+  end
+
+  def asciidoctor_pdf_optimize_bin
+    bin_script 'asciidoctor-pdf-optimize'
   end
 
   def run_command cmd, *args
@@ -210,7 +320,20 @@ RSpec.configure do |config|
         args.unshift(*cmd)
         cmd = args.shift
       end
-      Open3.capture3 cmd, *args
+      kw_args = Hash === args[-1] ? args.pop : {}
+      if kw_args[:use_bundler]
+        env_override = {}
+      else
+        env_override = { 'RUBYOPT' => nil }
+        if (defined? Bundler) && (prawn_table = Bundler.definition.dependencies.find {|it| it.name == 'prawn-table' })
+          env_override['PRAWN_TABLE_REQUIRE_PATH'] = (prawn_table.source.path + 'lib/prawn/table').to_s
+        end
+      end
+      if (out = kw_args[:out])
+        Open3.pipeline_w([env_override, cmd, *args, { out: out }]) {}
+      else
+        Open3.capture3 env_override, cmd, *args
+      end
     end
   end
 
@@ -243,22 +366,23 @@ RSpec.configure do |config|
   end
 
   (PDF_INSPECTOR_CLASS = {
-    text: EnhancedPDFTextInspector,
+    image: ImageInspector,
+    line: LineInspector,
     page: PDF::Inspector::Page,
     rect: PDF::Inspector::Graphics::Rectangle,
-    line: LineInspector,
+    text: EnhancedPDFTextInspector,
   }).default = EnhancedPDFTextInspector
-
-  alias :original_to_pdf :to_pdf
 
   def to_pdf input, opts = {}
     analyze = opts.delete :analyze
-    opts[:attributes] = { 'imagesdir' => fixtures_dir, 'nofooter' => '' } unless opts.key? :attributes
+    enable_footer = opts.delete :enable_footer
+    opts[:attributes] = { 'imagesdir' => fixtures_dir } unless opts.key? :attributes
+    opts[:attributes]['nofooter'] = '' unless enable_footer
     if (attribute_overrides = opts.delete :attribute_overrides)
       (opts[:attributes] ||= {}).update attribute_overrides
     end
     if Hash === (pdf_theme = opts[:pdf_theme])
-      opts[:pdf_theme] = build_pdf_theme pdf_theme
+      opts[:pdf_theme] = build_pdf_theme pdf_theme, (pdf_theme.delete :extends)
     end
     if Pathname === input
       opts[:to_dir] = output_dir unless opts.key? :to_dir
@@ -279,12 +403,14 @@ RSpec.configure do |config|
 
   def to_pdf_file input, output_filename, opts = {}
     opts[:to_file] = (to_file = File.join output_dir, output_filename)
-    opts[:attributes] = { 'imagesdir' => fixtures_dir, 'nofooter' => '' } unless opts.key? :attributes
+    enable_footer = opts.delete :enable_footer
+    opts[:attributes] = { 'imagesdir' => fixtures_dir } unless opts.key? :attributes
+    opts[:attributes]['nofooter'] = '' unless enable_footer
     if (attribute_overrides = opts.delete :attribute_overrides)
       (opts[:attributes] ||= {}).update attribute_overrides
     end
     if Hash === (pdf_theme = opts[:pdf_theme])
-      opts[:pdf_theme] = build_pdf_theme pdf_theme
+      opts[:pdf_theme] = build_pdf_theme pdf_theme, (pdf_theme.delete :extends)
     end
     if Pathname === input
       Asciidoctor.convert_file input, (opts.merge backend: 'pdf', safe: :safe)
@@ -294,14 +420,15 @@ RSpec.configure do |config|
     to_file
   end
 
-  def build_pdf_theme overrides = {}
-    Asciidoctor::PDF::ThemeLoader.load_theme.tap {|theme| overrides.each {|k, v| theme[k] = v } }
+  def build_pdf_theme overrides = {}, extends = nil
+    (Asciidoctor::PDF::ThemeLoader.load_theme extends).tap {|theme| overrides.each {|k, v| theme[k] = v } }
   end
 
   def extract_outline pdf, list = pdf.outlines
     result = []
     objects = pdf.objects
     pages = pdf.pages
+    labels = get_page_labels pdf
     entry = list[:First]
     while entry
       entry = objects[entry]
@@ -310,8 +437,14 @@ RSpec.configure do |config|
       dest_page_object = objects[dest[0]]
       dest_page = pages.find {|candidate| candidate.page_object == dest_page_object }
       top = dest_page.attributes[:MediaBox][3] == dest[3]
-      children = entry[:Count] > 0 ? (extract_outline pdf, entry) : []
-      result << { title: title, dest: { pagenum: dest_page.number, x: dest[2], y: dest[3], top: top }, children: children }
+      if (count = entry[:Count]) == 0
+        closed = true
+        children = []
+      else
+        closed = count < 0
+        children = extract_outline pdf, entry
+      end
+      result << { title: title, dest: { pagenum: dest_page.number, label: labels[dest_page.number - 1], x: dest[2], y: dest[3], top: top }, closed: closed, children: children }
       entry = entry[:Next]
     end
     result
@@ -324,16 +457,32 @@ RSpec.configure do |config|
 
   def get_page_labels pdf
     objects = pdf.objects
-    Hash[*objects[pdf.catalog[:PageLabels]][:Nums]].reduce([]) {|accum, (idx, val)| accum[idx] = val[:P]; accum }
+    Hash[*objects[pdf.catalog[:PageLabels]][:Nums]].each_with_object([]) {|(idx, val), accum| accum[idx] = val[:P] }
   end
 
-  def get_annotations pdf, page_num
+  def get_annotations pdf, page_num = nil
     objects = pdf.objects
-    (pdf.page page_num).attributes[:Annots].map {|ref| objects[ref] }
+    if page_num
+      (pdf.page page_num).attributes[:Annots].to_a.map {|ref| objects[ref] }
+    else
+      pdf.pages.each_with_object([]) {|page, accum| page.attributes[:Annots].to_a.each {|ref| accum << objects[ref] } }
+    end
   end
 
-  def get_page_size pdf, page_num
-    (pdf.page page_num).attributes[:MediaBox].slice 2, 2
+  def get_images pdf, page_num = nil
+    if page_num
+      (pdf.page page_num).xobjects.select {|_, candidate| candidate.hash[:Subtype] == :Image }.values
+    else
+      pdf.pages.each_with_object([]) {|page, accum| page.xobjects.each {|_, candidate| candidate.hash[:Subtype] == :Image ? (accum << candidate) : accum } }
+    end
+  end
+
+  def get_page_size pdf, page_num = 1
+    if ::PDF::Reader === pdf
+      (pdf.page page_num).attributes[:MediaBox].slice 2, 2
+    else
+      pdf.pages[page_num - 1][:size]
+    end
   end
 
   def get_page_number pdf, page
@@ -344,6 +493,14 @@ RSpec.configure do |config|
 
   def lorem_ipsum id
     (@lorem_ipsum_data ||= (YAML.load_file fixture_file 'lorem-ipsum.yml'))[id]
+  end
+
+  def windows?
+    RbConfig::CONFIG['host_os'] =~ /win|ming/
+  end
+
+  def home_dir
+    windows? ? (Dir.home.tr ?\\, '/') : Dir.home
   end
 
   def with_memory_logger level = nil
@@ -368,6 +525,52 @@ RSpec.configure do |config|
     end
   end
 
+  def with_local_webserver host = resolve_localhost, port = 9876
+    base_dir = fixtures_dir
+    server = TCPServer.new host, port
+    server_thread = Thread.start do
+      Thread.current[:requests] = requests = []
+      while (session = server.accept)
+        requests << (request = session.gets)
+        if /^GET (\S+) HTTP\/1\.1$/ =~ request.chomp
+          resource = (resource = $1) == '' ? '.' : resource
+        else
+          session.print %(HTTP/1.1 405 Method Not Allowed\r\nContent-Type: text/plain\r\n\r\n)
+          session.print %(405 - Method not allowed\r\n)
+          session.close
+          next
+        end
+        resource, _query_string = resource.split '?', 2 if resource.include? '?'
+        if File.file? (resource_file = (File.join base_dir, resource))
+          if (ext = (File.extname resource_file)[1..-1])
+            mimetype = ext == 'adoc' ? 'text/plain' : %(image/#{ext})
+          else
+            mimetype = 'text/plain'
+          end
+          session.print %(HTTP/1.1 200 OK\r\nContent-Type: #{mimetype}\r\n\r\n)
+          File.open resource_file, 'rb:utf-8:utf-8' do |fd|
+            session.write fd.read 256 until fd.eof?
+          end
+        else
+          session.print %(HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\n)
+          session.print %(404 - Resource not found.\r\n)
+        end
+        session.close
+      end
+    end
+    begin
+      yield %(http://#{host}:#{port}), server_thread
+    ensure
+      server_thread.exit
+      server_thread.value
+      server.close
+    end
+  end
+
+  def resolve_localhost
+    Socket.ip_address_list.find(&:ipv4?).ip_address
+  end
+
   def compute_image_differences reference, actual, difference = nil
     diff = []
     if reference
@@ -384,11 +587,11 @@ RSpec.configure do |config|
 
     actual_image.height.times do |y|
       actual_image.row(y).each_with_index do |pixel, x|
-        diff << [x,y] unless pixel == reference_image[x,y]
+        diff << [x, y] unless pixel == reference_image[x, y]
       end
     end
 
-    if diff.length > 0 && difference
+    if !diff.empty? && difference
       x = diff.map {|xy| xy[0] }
       y = diff.map {|xy| xy[1] }
       actual_image.rect x.min, y.min, x.max, y.max, (ChunkyPNG::Color.rgb 0, 255, 0)
@@ -407,31 +610,68 @@ RSpec::Matchers.define :have_size do |expected|
 end
 
 RSpec::Matchers.define :have_message do |expected|
+  actual = nil
   match do |logger|
     result = false
     if (messages = logger.messages).size == 1
       if (message = messages[0])[:severity] == expected[:severity]
+        if Hash === (message_text = message[:message])
+          message_text = message_text[:text]
+        end
         if Regexp === (expected_message = expected[:message])
-          result = true if expected_message.match? message[:message]
+          result = true if expected_message.match? message_text
         elsif expected_message.start_with? '~'
-          result = true if message[:message].include? expected_message[1..-1]
-        elsif message[:message] === expected_message
+          result = true if message_text.include? expected_message[1..-1]
+        elsif message_text === expected_message
           result = true
         end
       end
+      actual = message
     end
     result
   end
 
-  failure_message { %(expected #{expected[:severity]} message#{expected[:message].chr == '~' ? ' containing ' : ' matching '}`#{expected[:message]}' to have been logged) }
+  failure_message do
+    %(expected #{expected[:severity]} message#{expected[:message].to_s.chr == '~' ? ' containing ' : ' matching '}`#{expected[:message]}' to have been logged) + (actual ? %(, but got #{actual[:severity]}: #{actual[:message]}) : '')
+  end
 end
 
 RSpec::Matchers.define :log_message do |expected|
   match notify_expectation_failures: true do |actual|
-    with_memory_logger do |logger|
+    if expected
+      log_level_override = expected.delete :using_log_level
+      expected = nil if expected.empty?
+    end
+    with_memory_logger log_level_override do |logger|
       actual.call
-      (expect logger).to have_message expected if logger
+      if logger
+        if expected
+          (expect logger).to have_message expected
+        else
+          (expect logger).not_to be_empty
+        end
+      end
       true
+    end
+  end
+
+  #match_when_negated notify_expectation_failures: true do |actual|
+  #  with_memory_logger expected.to_h[:using_log_level] do |logger|
+  #    actual.call
+  #    logger ? logger.empty? : true
+  #  end
+  #end
+
+  supports_block_expectations
+end
+
+# define matcher to replace `.not_to log_message` until notify_expectation_failures is supported for negated match
+# see https://github.com/rspec/rspec-expectations/issues/1124
+RSpec::Matchers.define :not_log_message do |expected|
+  match notify_expectation_failures: true do |actual|
+    with_memory_logger expected.to_h[:using_log_level] do |logger|
+      actual.call
+      logger ? logger.empty? : true
     end
   end
 
@@ -441,6 +681,8 @@ end
 RSpec::Matchers.define :visually_match do |reference_filename|
   reference_path = (Pathname.new reference_filename).absolute? ? reference_filename : (File.join __dir__, 'reference', reference_filename)
   match do |actual_path|
+    # NOTE uncomment this line and run `bundle exec rspec -t ~visual` to detect which tests use a visual match
+    #warn caller.find {|it| it.include? '_spec.rb:' }
     return false unless File.exist? reference_path
     images_output_dir = output_file 'visual-comparison-workdir'
     Dir.mkdir images_output_dir unless Dir.exist? images_output_dir
@@ -449,19 +691,27 @@ RSpec::Matchers.define :visually_match do |reference_filename|
     system 'pdftocairo', '-png', reference_path, %(#{output_basename}-reference)
 
     pixels = 0
+    tmp_files = [actual_path]
 
     Dir[%(#{output_basename}-{actual,reference}-*.png)].map {|filename|
       (/-(?:actual|reference)-(\d+)\.png$/.match filename)[1]
     }.sort.uniq.each do |idx|
       reference_page_filename = %(#{output_basename}-reference-#{idx}.png)
       reference_page_filename = nil unless File.exist? reference_page_filename
+      tmp_files << reference_page_filename if reference_page_filename
       actual_page_filename = %(#{output_basename}-actual-#{idx}.png)
       actual_page_filename = nil unless File.exist? actual_page_filename
+      tmp_files << actual_page_filename if actual_page_filename
       next if reference_page_filename && actual_page_filename && (FileUtils.compare_file reference_page_filename, actual_page_filename)
       pixels += compute_image_differences reference_page_filename, actual_page_filename, %(#{output_basename}-diff-#{idx}.png)
     end
 
-    pixels.zero?
+    if pixels > 0
+      false
+    else
+      tmp_files.each {|it| File.unlink it } unless ENV.key? 'DEBUG'
+      true
+    end
   end
 
   failure_message {|actual_path| %(expected #{actual_path} to be visually identical to #{reference_path}) }

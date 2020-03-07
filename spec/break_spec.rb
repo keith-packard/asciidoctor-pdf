@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'spec_helper'
 
 describe 'Asciidoctor::PDF::Converter - Break' do
@@ -67,7 +69,7 @@ describe 'Asciidoctor::PDF::Converter - Break' do
       (expect pdf.pages[1][:strings]).to include 'bar'
     end
 
-    it 'should not advance to next page if already at top of page' do
+    it 'should not advance to next page if at start of document' do
       pdf = to_pdf <<~'EOS', analyze: :page
       <<<
 
@@ -77,14 +79,52 @@ describe 'Asciidoctor::PDF::Converter - Break' do
       (expect pdf.pages).to have_size 1
     end
 
+    it 'should not advance to next page if preceding content forced a new page to be started' do
+      pdf = to_pdf <<~'EOS', analyze: true
+      = Book Title
+      :doctype: book
+
+      = Part
+
+      <<<
+
+      == Chapter
+      EOS
+
+      part_text = (pdf.find_text 'Part')[0]
+      (expect part_text[:page_number]).to be 2
+      chapter_text = (pdf.find_text 'Chapter')[0]
+      (expect chapter_text[:page_number]).to be 3
+    end
+
+    it 'should not advance to next page if preceding content advanced page' do
+      pdf = to_pdf <<~EOS, analyze: true
+      ....
+      #{(['filler'] * 50).join ?\n}
+      ....
+
+      start of page
+      EOS
+
+      start_of_page_text = (pdf.find_text 'start of page')[0]
+      (expect start_of_page_text[:page_number]).to be 2
+    end
+
     it 'should not leave blank page at the end of document' do
-      pdf = to_pdf <<~'EOS', analyze: :page
+      input = <<~'EOS'
       foo
 
       <<<
       EOS
 
-      (expect pdf.pages).to have_size 1
+      [
+        {},
+        { page_background_color: 'eeeeee' },
+        { page_background_image: %(image:#{fixture_file 'square.svg'}[]) },
+      ].each do |theme_overrides|
+        pdf = to_pdf input, pdf_theme: theme_overrides, analyze: :page
+        (expect pdf.pages).to have_size 1
+      end
     end
 
     it 'should change layout if page break specifies page-layout attribute' do
@@ -99,8 +139,8 @@ describe 'Asciidoctor::PDF::Converter - Break' do
 
       text = pdf.text
       (expect text).to have_size 2
-      (expect text[0].values_at :string, :page_number, :x, :y).to eq ['portrait', 1, 48.24, 793.926]
-      (expect text[1].values_at :string, :page_number, :x, :y).to eq ['landscape', 2, 48.24, 547.316]
+      (expect text[0].values_at :string, :page_number, :x, :y).to eql ['portrait', 1, 48.24, 793.926]
+      (expect text[1].values_at :string, :page_number, :x, :y).to eql ['landscape', 2, 48.24, 547.316]
     end
 
     it 'should change layout if page break specifies layout role' do
@@ -115,8 +155,8 @@ describe 'Asciidoctor::PDF::Converter - Break' do
 
       text = pdf.text
       (expect text).to have_size 2
-      (expect text[0].values_at :string, :page_number, :x, :y).to eq ['portrait', 1, 48.24, 793.926]
-      (expect text[1].values_at :string, :page_number, :x, :y).to eq ['landscape', 2, 48.24, 547.316]
+      (expect text[0].values_at :string, :page_number, :x, :y).to eql ['portrait', 1, 48.24, 793.926]
+      (expect text[1].values_at :string, :page_number, :x, :y).to eql ['landscape', 2, 48.24, 547.316]
     end
 
     it 'should switch layout each time page break specifies layout role' do
