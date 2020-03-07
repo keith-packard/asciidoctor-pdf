@@ -6,19 +6,19 @@ Avoid using /usr/lib/ruby
 
 Signed-off-by: Keith Packard <keithp@keithp.com>
 ---
- lib/asciidoctor-pdf/theme_loader.rb | 2 +-
+ lib/asciidoctor/pdf/theme_loader.rb | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/asciidoctor-pdf/theme_loader.rb b/lib/asciidoctor-pdf/theme_loader.rb
-index 3c121b1..c5f4945 100644
---- a/lib/asciidoctor-pdf/theme_loader.rb
-+++ b/lib/asciidoctor-pdf/theme_loader.rb
-@@ -13,7 +13,7 @@ class ThemeLoader
-     include ::Asciidoctor::LoggingShim
-   end
+diff --git a/lib/asciidoctor/pdf/theme_loader.rb b/lib/asciidoctor/pdf/theme_loader.rb
+index 251f3de..ba5c1f1 100644
+--- a/lib/asciidoctor/pdf/theme_loader.rb
++++ b/lib/asciidoctor/pdf/theme_loader.rb
+@@ -10,7 +10,7 @@ module Asciidoctor
+       include ::Asciidoctor::PDF::Measurements
+       include ::Asciidoctor::Logging
  
--  DataDir = ::File.expand_path(::File.join(::File.dirname(__FILE__), '..', '..', 'data'))
-+  DataDir = '/usr/share/ruby-asciidoctor-pdf/data'
-   ThemesDir = ::File.join DataDir, 'themes'
-   FontsDir = ::File.join DataDir, 'fonts'
-   DefaultThemePath = ::File.expand_path 'default-theme.yml', ThemesDir
+-      DataDir = ::File.absolute_path %(#{__dir__}/../../../data)
++      DataDir = '/usr/share/ruby-asciidoctor-pdf/data'
+       ThemesDir = ::File.join DataDir, 'themes'
+       FontsDir = ::File.join DataDir, 'fonts'
+       BaseThemePath = ::File.join ThemesDir, 'base-theme.yml'
