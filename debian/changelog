@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (1.5.3-2) unstable; urgency=medium
+
+  * Relax dependencies. Closes: 969738.
+
+ -- Keith Packard <keithp@keithp.com>  Mon, 07 Sep 2020 16:22:58 -0700
+
 ruby-asciidoctor-pdf (1.5.3-1) unstable; urgency=medium
 
   * New upstream release
