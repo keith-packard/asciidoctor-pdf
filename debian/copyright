@@ -6,7 +6,7 @@ Files: *
 Copyright: 2014-2018 OpenDevise Inc. and the Asciidoctor Project
 License: MIT
 
-Files: lib/asciidoctor/pdf/prawn_ext/coderay_encoder.rb
+Files: lib/asciidoctor/pdf/ext/prawn/coderay_encoder.rb
 Copyright: 2014 Felipe Doria
 License: MIT
 
