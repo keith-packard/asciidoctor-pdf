@@ -11,12 +11,11 @@ be compatible.
 
 Signed-off-by: Keith Packard <keithp@keithp.com>
 ---
- asciidoctor-pdf.gemspec                    | 4 ++--
- lib/asciidoctor/pdf/ext/prawn-templates.rb | 2 +-
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ asciidoctor-pdf.gemspec | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/asciidoctor-pdf.gemspec b/asciidoctor-pdf.gemspec
-index 78d3ddc..5bd2e76 100644
+index 328bec0..e34ad88 100644
 --- a/asciidoctor-pdf.gemspec
 +++ b/asciidoctor-pdf.gemspec
 @@ -39,12 +39,12 @@ Gem::Specification.new do |s|
@@ -25,7 +24,7 @@ index 78d3ddc..5bd2e76 100644
    s.add_runtime_dependency 'prawn-table', '~> 0.2.0'
 -  s.add_runtime_dependency 'prawn-templates', '~> 0.1.0'
 +  # s.add_runtime_dependency 'prawn-templates', '~> 0.1.0'
-   s.add_runtime_dependency 'prawn-svg', '~> 0.30.0'
+   s.add_runtime_dependency 'prawn-svg', '~> 0.31.0'
    s.add_runtime_dependency 'prawn-icon', '~> 2.5.0'
    s.add_runtime_dependency 'safe_yaml', '~> 1.0.0'
    s.add_runtime_dependency 'thread_safe', '~> 0.3.0'
@@ -34,13 +33,3 @@ index 78d3ddc..5bd2e76 100644
    s.add_runtime_dependency 'treetop', '~> 1.6.0'
  
    s.add_development_dependency 'rake', '~> 13.0.0'
-diff --git a/lib/asciidoctor/pdf/ext/prawn-templates.rb b/lib/asciidoctor/pdf/ext/prawn-templates.rb
-index 66de197..da4f4ab 100644
---- a/lib/asciidoctor/pdf/ext/prawn-templates.rb
-+++ b/lib/asciidoctor/pdf/ext/prawn-templates.rb
-@@ -4,4 +4,4 @@ class Prawn::Document
-   # NOTE allows prawn-templates 0.0.4 to be used with prawn >= 2.2.0
-   const_set :VALID_OPTIONS, (send :remove_const, :VALID_OPTIONS).dup if VALID_OPTIONS.frozen?
- end
--require 'prawn/templates'
-+# require 'prawn/templates'
