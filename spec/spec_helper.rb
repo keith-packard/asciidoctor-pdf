@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 require_relative 'ignore-gem-warnings' if $VERBOSE
-if ENV['COVERAGE'] == 'deep'
+case ENV['COVERAGE']
+when 'deep'
   ENV['DEEP_COVER'] = 'true'
   require 'deep_cover'
-elsif ENV['COVERAGE'] == 'true'
+when 'true'
   require 'deep_cover/builtin_takeover'
   require 'simplecov'
 end
@@ -17,6 +18,7 @@ if (ENV.key? 'APPVEYOR') && (RbConfig::CONFIG['host_os'].include? 'mingw') && (G
 end
 
 require 'asciidoctor/pdf'
+require 'prawn/table/version'
 require 'base64'
 require 'chunky_png'
 require 'fileutils' unless defined? FileUtils

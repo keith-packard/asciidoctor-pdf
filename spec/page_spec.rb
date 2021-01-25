@@ -19,7 +19,8 @@ describe 'Asciidoctor::PDF::Converter - Page' do
       content
       EOS
       (expect pdf.pages).to have_size 1
-      (expect pdf.pages[0][:size]).to eql PDF::Core::PageGeometry::SIZES['LETTER']
+      # NOTE pdf-core 0.8 coerces whole number floats to integers
+      (expect pdf.pages[0][:size].map(&:to_f)).to eql PDF::Core::PageGeometry::SIZES['LETTER']
     end
 
     it 'should set page size specified by pdf-page-size attribute using dimension array in points' do
@@ -29,7 +30,7 @@ describe 'Asciidoctor::PDF::Converter - Page' do
       content
       EOS
       (expect pdf.pages).to have_size 1
-      (expect pdf.pages[0][:size]).to eql [600.0, 800.0]
+      (expect pdf.pages[0][:size].map(&:to_f)).to eql [600.0, 800.0]
     end
 
     it 'should set page size specified by pdf-page-size attribute using dimension array in inches' do
@@ -39,7 +40,7 @@ describe 'Asciidoctor::PDF::Converter - Page' do
       content
       EOS
       (expect pdf.pages).to have_size 1
-      (expect pdf.pages[0][:size]).to eql PDF::Core::PageGeometry::SIZES['LETTER']
+      (expect pdf.pages[0][:size].map(&:to_f)).to eql PDF::Core::PageGeometry::SIZES['LETTER']
     end
 
     it 'should set page size specified by pdf-page-size attribute using dimension string in inches' do
@@ -49,7 +50,7 @@ describe 'Asciidoctor::PDF::Converter - Page' do
       content
       EOS
       (expect pdf.pages).to have_size 1
-      (expect pdf.pages[0][:size]).to eql PDF::Core::PageGeometry::SIZES['LETTER']
+      (expect pdf.pages[0][:size].map(&:to_f)).to eql PDF::Core::PageGeometry::SIZES['LETTER']
     end
   end
 
@@ -406,6 +407,32 @@ describe 'Asciidoctor::PDF::Converter - Page' do
       end
     end
 
+    it 'should resolve background image in theme relative to themesdir in classloader', if: RUBY_ENGINE == 'jruby' do
+      require fixture_file 'pdf-themes.jar'
+      pdf = to_pdf <<~'EOS', attribute_overrides: { 'pdf-theme' => 'uri:classloader:/pdf-themes/page-background-image-theme.yml' }
+      = Document Title
+      :doctype: book
+
+      content
+      EOS
+
+      images = get_images pdf, 1
+      (expect images).to have_size 1
+    end
+
+    it 'should resolve background image with absolute path for theme loaded from classloader', if: RUBY_ENGINE == 'jruby' do
+      require fixture_file 'pdf-themes.jar'
+      pdf = to_pdf <<~'EOS', attribute_overrides: { 'pdf-theme' => 'uri:classloader:/pdf-themes/page-background-image-from-fixturesdir-theme.yml', 'fixturesdir' => fixtures_dir }
+      = Document Title
+      :doctype: book
+
+      content
+      EOS
+
+      images = get_images pdf, 1
+      (expect images).to have_size 1
+    end
+
     it 'should resolve background image in theme relative to themesdir', visual: true do
       attribute_overrides = {
         'pdf-theme' => 'page-background-image',
@@ -632,7 +659,7 @@ describe 'Asciidoctor::PDF::Converter - Page' do
       (expect to_file).to visually_match 'page-background-image-fill.pdf'
     end
 
-    it 'should allow remote image in SVG to be read if allow-uri-read attribute is set', visual: true do
+    it 'should allow remote image in SVG to be read if allow-uri-read attribute is set', visual: true, network: true do
       to_file = to_pdf_file <<~'EOS', 'page-background-image-svg-with-remote-image.pdf', attribute_overrides: { 'allow-uri-read' => '' }
       :page-background-image: image:svg-with-remote-image.svg[fit=none,position=top]
 

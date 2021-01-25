@@ -5,6 +5,31 @@
 This document provides a high-level view of the changes to the {project-name} by release.
 For a detailed view of what has changed, refer to the {uri-repo}/commits/master[commit history] on GitHub.
 
+== 1.5.4 (2021-01-09) - @mojavelinux
+
+Bug Fixes::
+
+* restore compatiblity with Asciidoctor 2.0.12 when using Pygments (#1846)
+* fix numeric assertions in test suite (#1542)
+* keep caption with image when image is scaled down to fit page (#1803)
+* prevent inline image from rendering multiple times if fallback font is used for alt text (#1858)
+* disable cache tests if open-uri-cache gem is not available
+* disable hyphen tests if text-hyphen gem is not available
+* compensate for change in how character_spacing is applied in FontMetricCache#width_of after Prawn 2.2.2
+* allow inline image to be enclosed in link macro (alt text was breaking parsing)
+* use oembed API over HTTPS to get thumbnail for Vimeo video
+* use conum font family defined in theme for conum in verbatim block (#1611)
+* patch float precision constant so prawn-table does not fail to arrange cells that span columns (#1835)
+* resolve images in theme correctly when theme is loaded from classloader (JRuby only) (#1829)
+
+Compliance::
+
+* upgrade to prawn-svg 0.31 (adds support for loading embedded images from a data URI) (#1810)
+
+Build / Infrastructure::
+
+* migrate Linux CI jobs to GitHub Actions
+
 == 1.5.3 (2020-02-28) - @mojavelinux
 
 Bug Fixes::

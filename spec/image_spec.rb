@@ -252,7 +252,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       text = pdf.find_text 'Text with link'
       (expect text).to have_size 1
       (expect text[0][:font_name]).to eql 'mplus1mn-regular'
-      (expect text[0][:font_size]).to eql 12.0
+      (expect text[0][:font_size].to_f).to eql 12.0
       (expect text[0][:font_color]).to eql 'AA0000'
     end
 
@@ -264,7 +264,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       text = pdf.find_text 'This text uses a document font.'
       (expect text).to have_size 1
       (expect text[0][:font_name]).to eql 'mplus1mn-regular'
-      (expect text[0][:font_size]).to eql 12.0
+      (expect text[0][:font_size].to_f).to eql 12.0
       (expect text[0][:font_color]).to eql 'AA0000'
     end
 
@@ -276,7 +276,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       text = pdf.find_text 'This text uses the default SVG font.'
       (expect text).to have_size 1
       (expect text[0][:font_name]).to eql 'NotoSerif'
-      (expect text[0][:font_size]).to eql 12.0
+      (expect text[0][:font_size].to_f).to eql 12.0
       (expect text[0][:font_color]).to eql 'AA0000'
     end
 
@@ -288,7 +288,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       text = pdf.find_text 'This text uses the serif font.'
       (expect text).to have_size 1
       (expect text[0][:font_name]).to eql 'Times-Roman'
-      (expect text[0][:font_size]).to eql 12.0
+      (expect text[0][:font_size].to_f).to eql 12.0
       (expect text[0][:font_color]).to eql 'AA0000'
     end
 
@@ -302,7 +302,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       text = pdf.find_text 'This text uses the serif font.'
       (expect text).to have_size 1
       (expect text[0][:font_name]).to eql 'NotoSerif'
-      (expect text[0][:font_size]).to eql 12.0
+      (expect text[0][:font_size].to_f).to eql 12.0
       (expect text[0][:font_color]).to eql 'AA0000'
     end
 
@@ -317,7 +317,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
         text = pdf.find_text 'This text uses the default SVG font.'
         (expect text).to have_size 1
         (expect text[0][:font_name]).to eql 'Times-Roman'
-        (expect text[0][:font_size]).to eql 12.0
+        (expect text[0][:font_size].to_f).to eql 12.0
         (expect text[0][:font_color]).to eql 'AA0000'
       end
     end
@@ -338,6 +338,22 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       (expect to_file).to visually_match 'image-block-svg-with-image.pdf'
     end
 
+    it 'should embed image from data-uri in inline image', visual: true do
+      to_file = to_pdf_file <<~'EOS', 'image-svg-with-data-uri-image.pdf'
+      A sign of a good writer: image:svg-with-data-uri-image.svg[]
+      EOS
+
+      (expect to_file).to visually_match 'image-svg-with-image.pdf'
+    end
+
+    it 'should embed image from data-uri in block image', visual: true do
+      to_file = to_pdf_file <<~'EOS', 'image-block-svg-with-data-uri-image.pdf'
+      image::svg-with-data-uri-image.svg[]
+      EOS
+
+      (expect to_file).to visually_match 'image-block-svg-with-image.pdf'
+    end
+
     it 'should not embed remote image if allow allow-uri-read attribute is not set', visual: true do
       (expect do
         to_file = to_pdf_file <<~'EOS', 'image-svg-with-remote-image-disabled.pdf'
@@ -348,7 +364,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       end).to log_message severity: :WARN, message: %(~problem encountered in image: #{fixture_file 'svg-with-remote-image.svg'}; Error retrieving URL https://cdn.jsdelivr.net/gh/asciidoctor/asciidoctor-pdf@v1.5.0.rc.2/spec/fixtures/logo.png)
     end
 
-    it 'should embed remote image if allow allow-uri-read attribute is set', visual: true do
+    it 'should embed remote image if allow allow-uri-read attribute is set', visual: true, network: true do
       to_file = to_pdf_file <<~'EOS', 'image-svg-with-remote-image.pdf', attribute_overrides: { 'allow-uri-read' => '' }
       A sign of a good writer: image:svg-with-remote-image.svg[]
       EOS
@@ -459,7 +475,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       (expect pages).to have_size 3
       (expect pages[0][:size]).to eql PDF::Core::PageGeometry::SIZES['A4']
       (expect pages[0][:text][-1][:string]).to eql '1'
-      (expect pages[1][:size]).to eql PDF::Core::PageGeometry::SIZES['LETTER']
+      (expect pages[1][:size].map(&:to_f)).to eql PDF::Core::PageGeometry::SIZES['LETTER']
       # NOTE no running content on imported pages
       (expect pages[1][:text]).to be_empty
       (expect pages[2][:text][-1][:string]).to eql '3'
@@ -484,7 +500,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       (expect pages).to have_size 3
       (expect pages[0][:size]).to eql PDF::Core::PageGeometry::SIZES['A4']
       (expect pages[0][:text][-1][:string]).to eql '1'
-      (expect pages[1][:size]).to eql PDF::Core::PageGeometry::SIZES['LETTER']
+      (expect pages[1][:size].map(&:to_f)).to eql PDF::Core::PageGeometry::SIZES['LETTER']
       # NOTE no running content on imported pages
       (expect pages[1][:text]).to be_empty
       (expect pages[2][:text][-1][:string]).to eql '3'
@@ -684,7 +700,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       end
     end
 
-    it 'should read remote image over HTTPS if allow-uri-read is set' do
+    it 'should read remote image over HTTPS if allow-uri-read is set', network: true do
       pdf = to_pdf 'image::https://cdn.jsdelivr.net/gh/asciidoctor/asciidoctor-pdf@v1.5.0.rc.2/spec/fixtures/logo.png[Remote Image]', attribute_overrides: { 'allow-uri-read' => '' }
       images = get_images pdf, 1
       (expect images).to have_size 1
@@ -753,7 +769,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
           OpenURI::Cache.invalidate image_url
         end
       end
-    end
+    end unless (Gem::Specification.stubs_for 'open-uri-cached').empty?
   end
 
   context 'Inline' do
@@ -770,6 +786,15 @@ describe 'Asciidoctor::PDF::Converter - Image' do
         pdf = to_pdf 'You cannot see that which is image:not-there.png[not there].', analyze: true
         (expect pdf.lines).to eql ['You cannot see that which is [not there].']
       end).to log_message severity: :WARN, message: '~image to embed not found or not readable'
+    end
+
+    it 'should only render inline image once if alt text is chunked to apply a fallback font' do
+      pdf = to_pdf <<~'EOS', attribute_overrides: { 'imagesdir' => examples_dir, 'pdf-theme' => 'default-with-fallback-font' }, analyze: :image
+      How many wolpertingers do you see? +
+      image:wolpertinger.jpg[チのデータレプリケーションです。]
+      EOS
+
+      (expect pdf.images).to have_size 1
     end
 
     it 'should warn instead of crash if inline image is unreadable' do
@@ -926,6 +951,22 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       (expect (link_rect[3] - link_rect[1]).round 1).to eql 14.3
       (expect link_rect[0]).to eql 48.24
     end
+
+    it 'should add link around inline image if image macro is enclosed in link macro' do
+      pdf = to_pdf <<~'EOS', attribute_overrides: { 'imagesdir' => examples_dir }
+      https://example.org[image:sample-logo.jpg[ACME,pdfwidth=1pc]] is a sign of quality!
+      EOS
+
+      annotations = get_annotations pdf, 1
+      (expect annotations).to have_size 1
+      link_annotation = annotations[0]
+      (expect link_annotation[:Subtype]).to be :Link
+      (expect link_annotation[:A][:URI]).to eql 'https://example.org'
+      link_rect = link_annotation[:Rect]
+      (expect (link_rect[2] - link_rect[0]).round 1).to eql 12.0
+      (expect (link_rect[3] - link_rect[1]).round 1).to eql 14.3
+      (expect link_rect[0]).to eql 48.24
+    end
   end
 
   context 'Caption' do
@@ -947,6 +988,39 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       (expect caption_text[:string]).to eql 'Figure 1. Tux, the Linux mascot'
       (expect caption_text[:font_name]).to eql 'NotoSerif-Italic'
       (expect caption_text[:y]).to be < image_bottom
+    end
+
+    it 'should show caption for missing image' do
+      (expect do
+        pdf = to_pdf <<~'EOS', analyze: true
+        .A missing image
+        image::no-such-image.png[Missing Image]
+        EOS
+        (expect pdf.lines).to eql ['[Missing Image] | no-such-image.png', 'Figure 1. A missing image']
+      end).to log_message severity: :WARN, message: '~image to embed not found or not readable'
+    end
+
+    it 'should keep caption on same page as image when image exceeds height of page' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+
+      .Image caption
+      image::tall-diagram.png[Tall diagram]
+      EOS
+
+      (expect get_images pdf, 2).to have_size 1
+      (expect pdf.pages[1].text).to eql 'Figure 1. Image caption'
+    end
+
+    it 'should scale down SVG at top of page to fit image and caption if dimensions exceed page size', visual: true do
+      to_file = to_pdf_file <<~EOS, 'image-svg-with-caption-scale-to-fit-page.pdf'
+      :pdf-page-size: Letter
+
+      .#{(['title text'] * 15).join ' '}
+      image::watermark.svg[pdfwidth=100%]
+      EOS
+
+      (expect to_file).to visually_match 'image-svg-with-caption-scale-to-fit-page.pdf'
     end
 
     it 'should set caption align to image align if theme sets caption align to inherit' do

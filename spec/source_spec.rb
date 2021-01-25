@@ -57,25 +57,39 @@ describe 'Asciidoctor::PDF::Converter - Source' do
       pdf = to_pdf <<~'EOS', analyze: true
       :source-highlighter: rouge
 
+      [source,php?funcnamehighlighting=1]
+      ----
+      cal_days_in_month(CAL_GREGORIAN, 6, 2019)
+      ----
+
       [source,php?funcnamehighlighting=0]
       ----
       cal_days_in_month(CAL_GREGORIAN, 6, 2019)
       ----
       EOS
 
-      if Rouge.version >= '2.1.0'
-        funcname_text = (pdf.find_text 'cal_days_in_month')[0]
-        (expect funcname_text).not_to be_nil
-        (expect funcname_text[:font_color]).to eql '333333'
+      if (Gem::Version.new Rouge.version) >= (Gem::Version.new '2.1.0')
+        ref_funcname_text = (pdf.find_text 'cal_days_in_month')[0]
+        (expect ref_funcname_text).not_to be_nil
+        ref_year_text = (pdf.find_text '2019')[0]
+        (expect ref_year_text).not_to be_nil
 
-        year_text = (pdf.find_text '2019')[0]
+        funcname_text = (pdf.find_text 'cal_days_in_month')[1]
+        (expect funcname_text).not_to be_nil
+        year_text = (pdf.find_text '2019')[1]
         (expect year_text).not_to be_nil
-        (expect year_text[:font_color]).to eql '0000DD'
+
+        (expect funcname_text[:font_color]).not_to eql ref_funcname_text[:font_color]
+        (expect funcname_text[:font_name]).not_to eql ref_funcname_text[:font_name]
+        (expect year_text[:font_color]).to eql ref_year_text[:font_color]
+        (expect year_text[:font_name]).to eql ref_year_text[:font_name]
       else
         text = pdf.text
-        (expect text).to have_size 1
+        (expect text).to have_size 2
         (expect text[0][:string]).to eql 'cal_days_in_month(CAL_GREGORIAN, 6, 2019)'
         (expect text[0][:font_color]).to eql '333333'
+        (expect text[1][:string]).to eql 'cal_days_in_month(CAL_GREGORIAN, 6, 2019)'
+        (expect text[1][:font_color]).to eql '333333'
       end
     end
 
@@ -714,6 +728,28 @@ describe 'Asciidoctor::PDF::Converter - Source' do
   end if (ENV.key? 'PYGMENTS_VERSION') && !(Gem.win_platform? && RUBY_ENGINE == 'jruby')
 
   context 'Callouts' do
+    it 'should honor font family set on conum category in theme for conum in source block' do
+      pdf = to_pdf <<~EOS, pdf_theme: { code_font_family: 'Courier' }, analyze: true
+      :source-highlighter: rouge
+
+      [source,java]
+      ----
+      public interface Person {
+        String getName(); <1>
+        String getDob(); <2>
+        int getAge(); <3>
+      }
+      ----
+      EOS
+
+      lines = pdf.lines
+      (expect lines[1]).to end_with '; ①'
+      (expect lines[2]).to end_with '; ②'
+      (expect lines[3]).to end_with '; ③'
+      conum_text = (pdf.find_text '①')[0]
+      (expect conum_text[:font_name]).not_to eql 'Courier'
+    end
+
     it 'should substitute autonumber callouts with circled numbers when using rouge as syntax highlighter' do
       pdf = to_pdf <<~EOS, analyze: true
       :source-highlighter: rouge

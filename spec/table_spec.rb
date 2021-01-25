@@ -27,6 +27,25 @@ describe 'Asciidoctor::PDF::Converter - Table' do
     end).to not_raise_exception & (log_message severity: :WARN, message: 'no rows found in table')
   end
 
+  it 'should not crash when rows have cells with colspans of varying length' do
+    (expect do
+      pdf = to_pdf <<~'EOS', analyze: true
+      [cols=3*]
+      |===
+      3+|X
+
+      |Y
+      2+|Z
+      |===
+      EOS
+
+      y_text = (pdf.find_text 'Y')[0]
+      z_text = (pdf.find_text 'Z')[0]
+      (expect y_text[:y]).to eql z_text[:y]
+      (expect y_text[:x]).to be < z_text[:x]
+    end).to not_raise_exception
+  end unless (Gem::Version.new Asciidoctor::VERSION) < (Gem::Version.new '2.0.0')
+
   context 'Decoration' do
     it 'should apply frame all and grid all by default' do
       pdf = to_pdf <<~'EOS', analyze: :line
@@ -397,8 +416,15 @@ describe 'Asciidoctor::PDF::Converter - Table' do
       |===
       EOS
 
-      (expect pdf.find_text 'Operation').not_to be_empty
-      (expect pdf.find_text 'Operator').not_to be_empty
+      if (Gem::Version.new Prawn::Table::VERSION) > (Gem::Version.new '0.2.2')
+        (expect pdf.find_text 'Operation').not_to be_empty
+        (expect pdf.find_text 'Operator').not_to be_empty
+      else
+        (expect pdf.find_text 'Operation').to be_empty
+        (expect pdf.find_text 'Operatio').not_to be_empty
+        (expect pdf.find_text 'Operator').to be_empty
+        (expect pdf.find_text 'Operato').not_to be_empty
+      end
     end
 
     it 'should not break words in body rows when autowidth option is set' do

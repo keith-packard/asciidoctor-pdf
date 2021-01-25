@@ -172,9 +172,10 @@ module Asciidoctor
                   fragment = {
                     image_path: attributes[:src],
                     image_format: attributes[:format],
-                    # a zero-width space in the text will cause the image to be duplicated
-                    text: (attributes[:alt].delete ZeroWidthSpace),
+                    # NOTE: add enclosing square brackets here to avoid errors in parsing
+                    text: %([#{attributes[:alt].delete ZeroWidthSpace}]),
                     callback: [InlineImageRenderer],
+                    object_id: node.object_id, # used to deduplicate if fragment gets split up
                   }
                   if inherited && (link = inherited[:link])
                     fragment[:link] = link
@@ -379,9 +380,10 @@ module Asciidoctor
 
         def update_fragment fragment, props
           fragment.update props do |k, oval, nval|
-            if k == :styles
+            case k
+            when :styles
               nval ? (oval.merge nval) : oval.clear
-            elsif k == :callback
+            when :callback
               oval | nval
             else
               nval

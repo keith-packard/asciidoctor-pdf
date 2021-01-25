@@ -32,7 +32,7 @@ module Asciidoctor
       PygmentsRequirePath = ::File.join __dir__, 'ext/pygments'
       OptimizerRequirePath = ::File.join __dir__, 'optimizer'
 
-      AsciidoctorVersion = ::Gem::Version.create ::Asciidoctor::VERSION
+      AsciidoctorVersion = ::Gem::Version.new ::Asciidoctor::VERSION
       AdmonitionIcons = {
         caution: { name: 'fas-fire', stroke_color: 'BF3400', size: 24 },
         important: { name: 'fas-exclamation-circle', stroke_color: 'BF0000', size: 24 },
@@ -92,7 +92,7 @@ module Asciidoctor
         'circled' => (?\u2460..?\u2473).to_a,
         'filled' => (?\u2776..?\u277f).to_a + (?\u24eb..?\u24f4).to_a,
       }
-      SimpleAttributeRefRx = /(?<!\\)\{\w+(?:[\-]\w+)*\}/
+      SimpleAttributeRefRx = /(?<!\\)\{\w+(?:-\w+)*\}/
       MeasurementRxt = '\\d+(?:\\.\\d+)?(?:in|cm|mm|p[txc])?'
       MeasurementPartsRx = /^(\d+(?:\.\d+)?)(in|mm|cm|p[txc])?$/
       PageSizeRx = /^(?:\[(#{MeasurementRxt}), ?(#{MeasurementRxt})\]|(#{MeasurementRxt})(?: x |x)(#{MeasurementRxt})|\S+)$/
@@ -108,6 +108,7 @@ module Asciidoctor
       WhitespaceChars = ' ' + TAB + LF
       ValueSeparatorRx = /;|,/
       HexColorRx = /^#[a-fA-F0-9]{6}$/
+      VimeoThumbnailRx = /<thumbnail_url>(.*?)<\/thumbnail_url>/
       SourceHighlighters = %w(coderay pygments rouge).to_set
       ViewportWidth = ::Module.new
       (TitleStyles = {
@@ -126,8 +127,8 @@ module Asciidoctor
           doc.attributes['data-uri'] = ((doc.instance_variable_get :@attribute_overrides) || {})['data-uri'] = ''
         end
         @capabilities = {
-          special_sectnums: AsciidoctorVersion >= (::Gem::Version.create '1.5.7'),
-          syntax_highlighter: AsciidoctorVersion >= (::Gem::Version.create '2.0.0'),
+          special_sectnums: AsciidoctorVersion >= (::Gem::Version.new '1.5.7'),
+          syntax_highlighter: AsciidoctorVersion >= (::Gem::Version.new '2.0.0'),
         }
         @initial_instance_variables = [:@initial_instance_variables] + instance_variables
       end
@@ -571,9 +572,10 @@ module Asciidoctor
           # NOTE: section must have pdf-anchor in order to be listed in the TOC
           sect.set_attr 'pdf-anchor', (sect_anchor = derive_anchor_from_id sect.id, %(#{start_pgnum}-#{y.ceil}))
           add_dest_for_block sect, sect_anchor
-          if type == :part
+          case type
+          when :part
             layout_part_title sect, title, align: align, level: hlevel
-          elsif type == :chapter
+          when :chapter
             layout_chapter_title sect, title, align: align, level: hlevel
           else
             layout_heading title, align: align, level: hlevel, outdent: true
@@ -1333,8 +1335,14 @@ module Asciidoctor
           marker_gap = rendered_width_of_char 'x'
           font marker_style[:font_family], size: marker_style[:font_size] do
             marker_width = rendered_width_of_string marker
+            # NOTE compensate if character_spacing is not applied to first character
+            # see https://github.com/prawnpdf/prawn/commit/c61c5d48841910aa11b9e3d6f0e01b68ce435329
+            character_spacing_correction = 0
+            character_spacing(-0.5) do
+              character_spacing_correction = 0.5 if (rendered_width_of_char 'x', character_spacing: -0.5) == marker_gap
+            end
             marker_height = height_of_typeset_text marker, line_height: marker_style[:line_height], single_line: true
-            start_position = -marker_width + -marker_gap
+            start_position = -marker_width + -marker_gap + character_spacing_correction
             float do
               start_new_page if @media == 'prepress' && cursor < marker_height
               flow_bounding_box start_position, width: marker_width do
@@ -1591,14 +1599,9 @@ module Asciidoctor
         when 'vimeo'
           video_path = %(https://vimeo.com/#{video_id = node.attr 'target'})
           if allow_uri_read
-            if cache_uri
-              Helpers.require_library 'open-uri/cached', 'open-uri-cached' unless defined? ::OpenURI::Cache
-            else
-              ::OpenURI
-            end
-            poster = ::OpenURI.open_uri %(http://vimeo.com/api/v2/video/#{video_id}.xml), 'r' do |f|
-              /<thumbnail_large>(.*?)<\/thumbnail_large>/ =~ f.read && $1
-            end
+            poster = load_open_uri.open_uri(%(https://vimeo.com/api/oembed.xml?url=https%3A//vimeo.com/#{video_id}&width=1280), 'r') {|f| (VimeoThumbnailRx.match f.read)[1] } rescue nil
+          else
+            poster = nil
           end
           type = 'Vimeo video'
         else
@@ -1702,7 +1705,7 @@ module Asciidoctor
             # NOTE: highlight can return nil if something goes wrong; fallback to encoded source string if this happens
             result = (lexer.highlight source_string, options: lexer_opts) || (node.apply_subs source_string, [:specialcharacters])
             if node.attr? 'highlight', nil, false
-              if (highlight_lines = (node.method :resolve_lines_to_highlight).arity > 1 ?
+              if (highlight_lines = (node.method :resolve_lines_to_highlight).arity.abs > 1 ?
                   (node.resolve_lines_to_highlight source_string, (node.attr 'highlight')) :
                   (node.resolve_lines_to_highlight node.attr 'highlight')).empty?
                 highlight_lines = nil
@@ -1750,7 +1753,7 @@ module Asciidoctor
             lexer ||= ::Rouge::Lexers::PlainText
             source_string, conum_mapping = extract_conums source_string
             if node.attr? 'highlight', nil, false
-              unless (hl_lines = (node.method :resolve_lines_to_highlight).arity > 1 ?
+              unless (hl_lines = (node.method :resolve_lines_to_highlight).arity.abs > 1 ?
                   (node.resolve_lines_to_highlight source_string, (node.attr 'highlight')) :
                   (node.resolve_lines_to_highlight node.attr 'highlight')).empty?
                 formatter_opts[:highlight_lines] = hl_lines.map {|linenum| [linenum, true] }.to_h
@@ -1853,7 +1856,10 @@ module Asciidoctor
             line << fragment
           end
         end
-        conum_color = @theme.conum_font_color
+        conum_font_color = @theme.conum_font_color
+        if (conum_font_name = @theme.conum_font_family) == font_name
+          conum_font_name = nil
+        end
         last_line_num = lines.size - 1
         if linenums
           pad_size = (last_line_num + 1).to_s.length
@@ -1870,7 +1876,10 @@ module Asciidoctor
           if conum_mapping && (conums = conum_mapping.delete cur_line_num)
             line << { text: conums.shift } if ::String === conums[0]
             conum_text = conums.map {|num| conum_glyph num }.join ' '
-            line << (conum_color ? { text: conum_text, color: conum_color } : { text: conum_text })
+            conum_fragment = { text: conum_text }
+            conum_fragment[:color] = conum_font_color if conum_font_color
+            conum_fragment[:font] = conum_font_name if conum_font_name
+            line << conum_fragment
           end
           line << { text: LF } unless last_line
           line
@@ -2410,12 +2419,16 @@ module Asciidoctor
       end
 
       def convert_inline_callout node
-        if (conum_color = @theme.conum_font_color)
-          # NOTE CMYK value gets flattened here, but is restored by formatted text parser
-          %(<color rgb="#{conum_color}">#{conum_glyph node.text.to_i}</color>)
+        if (conum_font_family = @theme.conum_font_family) != font_name
+          result = %(<font name="#{conum_font_family}">#{conum_glyph node.text.to_i}</font>)
         else
-          conum_glyph node.text.to_i
+          result = conum_glyph node.text.to_i
         end
+        if (conum_font_color = @theme.conum_font_color)
+          # NOTE CMYK value gets flattened here, but is restored by formatted text parser
+          result = %(<color rgb="#{conum_font_color}">#{result}</font>)
+        end
+        result
       end
 
       def convert_inline_footnote node
@@ -2501,7 +2514,7 @@ module Asciidoctor
             if ::File.readable? image_path
               width_attr = (width = preresolve_explicit_width node.attributes) ? %( width="#{width}") : ''
               fit_attr = (fit = node.attr 'fit', nil, false) ? %( fit="#{fit}") : ''
-              img = %(<img src="#{image_path}" format="#{image_format}" alt="[#{encode_quotes node.attr 'alt'}]"#{width_attr}#{fit_attr}>)
+              img = %(<img src="#{image_path}" format="#{image_format}" alt="#{encode_quotes node.attr 'alt'}"#{width_attr}#{fit_attr}>)
             else
               logger.warn %(image to embed not found or not readable: #{image_path}) unless scratch?
               img = %([#{node.attr 'alt'}])
@@ -2889,8 +2902,8 @@ module Asciidoctor
         if opts.delete :dry_run
           height = nil
           dry_run do
-            move_down 1 # HACK: force top margin to be applied
-            height = (layout_caption subject, opts) - 1
+            move_down 0.001 # HACK: force top margin to be applied
+            height = layout_caption subject, opts
           end
           return height
         end
@@ -3583,7 +3596,7 @@ module Asciidoctor
 
       def write pdf_doc, target
         if target.respond_to? :write
-          target = ::QuantifiableStdout.new STDOUT if target == STDOUT
+          target = ::QuantifiableStdout.new $stdout if target == $stdout
           pdf_doc.render target
         else
           pdf_doc.render_file target
@@ -3694,7 +3707,7 @@ module Asciidoctor
         end
         # FIXME: due to the calculation error logged in #789, we must advance page even when content is split across pages
         advance_page if (opts.fetch :split_from_top, true) && block_height > cursor && !at_page_top?
-        caption_height = (node = opts[:caption_node]) && node.title? ? (layout_caption node, category: category) - 1 : 0
+        caption_height = (node = opts[:caption_node]) && node.title? ? (layout_caption node, category: category) : 0
         float do
           remaining_height = block_height - caption_height
           initial_page = true
@@ -4081,24 +4094,22 @@ module Asciidoctor
             unlink_tmp_file tmp_image.path
             nil
           end
-        # handle case when image is a URI
-        elsif (node.is_uri? image_path) ||
-            (imagesdir && (node.is_uri? imagesdir) && (image_path = node.normalize_web_path image_path, imagesdir, false))
-          unless allow_uri_read
+        # NOTE: this will catch a classloader resource path on JRuby (e.g., uri:classloader:/path/to/image)
+        elsif ::File.absolute_path? image_path
+          ::File.absolute_path image_path
+        elsif !(is_uri = node.is_uri? image_path) && imagesdir && (::File.absolute_path? imagesdir)
+          ::File.absolute_path image_path, imagesdir
+        elsif is_uri || (imagesdir && (node.is_uri? imagesdir) && (image_path = node.normalize_web_path image_path, imagesdir, false))
+          if !allow_uri_read
             logger.warn %(allow-uri-read is not enabled; cannot embed remote image: #{image_path}) unless scratch?
             return
-          end
-          if @tmp_files.key? image_path
+          elsif @tmp_files.key? image_path
             return @tmp_files[image_path]
-          elsif cache_uri
-            Helpers.require_library 'open-uri/cached', 'open-uri-cached' unless defined? ::OpenURI::Cache
-          else
-            ::OpenURI
           end
           tmp_image = ::Tempfile.create ['image-', image_format && %(.#{image_format})]
           tmp_image.binmode if (binary = image_format != 'svg')
           begin
-            ::OpenURI.open_uri(image_path, (binary ? 'rb' : 'r')) {|fd| tmp_image.write fd.read }
+            load_open_uri.open_uri(image_path, (binary ? 'rb' : 'r')) {|fd| tmp_image.write fd.read }
             tmp_image.close
             @tmp_files[image_path] = tmp_image.path
           rescue
@@ -4285,11 +4296,12 @@ module Asciidoctor
           result = {}
           center = nil
           (value.split ' ', 2).each do |keyword|
-            if keyword == 'left' || keyword == 'right'
+            case keyword
+            when 'left', 'right'
               result[:position] = keyword.to_sym
-            elsif keyword == 'top' || keyword == 'bottom'
+            when 'top', 'bottom'
               result[:vposition] = keyword.to_sym
-            elsif keyword == 'center'
+            when 'center'
               center = true
             end
           end
@@ -4346,6 +4358,14 @@ module Asciidoctor
         end unless (image_y = image_opts[:y])
 
         link_annotation [image_x, (image_y - image_height), (image_x + image_width), image_y], Border: [0, 0, 0], A: { Type: :Action, S: :URI, URI: uri.as_pdf }
+      end
+
+      def load_open_uri
+        if @cache_uri && !(defined? ::OpenURI::Cache)
+          # disable URI caching if library fails to load
+          @cache_uri = false if (Helpers.require_library 'open-uri/cached', 'open-uri-cached', :warn).nil?
+        end
+        ::OpenURI
       end
 
       def remove_tmp_files
