@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (1.5.4-2) unstable; urgency=medium
+
+  * Depend on ruby-concurrent (>= 1.1~). Closes: 981170.
+
+ -- Keith Packard <keithp@keithp.com>  Wed, 27 Jan 2021 08:49:19 -0800
+
 ruby-asciidoctor-pdf (1.5.4-1) unstable; urgency=medium
 
   * New upstream version. Closes: 981042.
