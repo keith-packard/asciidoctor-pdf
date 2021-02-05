@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (1.5.4-3) unstable; urgency=medium
+
+  * Fix broken dependency on prawn/templates.
+
+ -- Keith Packard <keithp@keithp.com>  Fri, 05 Feb 2021 00:58:44 -0800
+
 ruby-asciidoctor-pdf (1.5.4-2) unstable; urgency=medium
 
   * Depend on ruby-concurrent (>= 1.1~). Closes: 981170.
