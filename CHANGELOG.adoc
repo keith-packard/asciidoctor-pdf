@@ -3,13 +3,46 @@
 :uri-repo: https://github.com/asciidoctor/asciidoctor-pdf
 
 This document provides a high-level view of the changes to the {project-name} by release.
-For a detailed view of what has changed, refer to the {uri-repo}/commits/master[commit history] on GitHub.
+For a detailed view of what has changed, refer to the {uri-repo}/commits/v1.6.x[commit history] on GitHub.
+
+== 1.6.1 (2021-09-04) - @mojavelinux
+
+Enhancements::
+
+* align footnotes block to the bottom of the page it is placed on (#1833)
+
+Bug Fixes::
+
+* patch Prawn to preserve leading null character when running on Ruby 3; preserves inline anchors when text is split by page (#1963)
+
+== 1.6.0 (2021-05-10) - @mojavelinux
+
+Enhancements::
+
+* allow path of ghostscript command to be controlled using `GS` env var (#1791)
+
+Bug Fixes::
+
+* do not hyphenate a hyphen when hyphenation is enabled (#1562)
+
+Compliance::
+
+* add support for Ruby 3 and drop support for Ruby < 2.5 and JRuby < 9.2 (#1681)
+* upgrade to Prawn 2.4.0 (adds support for Ruby 3)
+* upgrade to prawn-svg 0.32 (adds support for Ruby 3 without a patch and for loading embedded images from a data URI)
+* upgrade to prawn-icon 3.0.x
+* release lock on ttfunk version (1.6 produces slightly different output from 1.5 for certain missing glyphs)
+* drop support for Asciidoctor < 2 (#1552)
+
+Build / Infrastructure::
+
+* run tests against pygments.rb 2.x in addition to pygments.rb 1.2.0
 
 == 1.5.4 (2021-01-09) - @mojavelinux
 
 Bug Fixes::
 
-* restore compatiblity with Asciidoctor 2.0.12 when using Pygments (#1846)
+* restore compatibility with Asciidoctor 2.0.12 when using Pygments (#1846)
 * fix numeric assertions in test suite (#1542)
 * keep caption with image when image is scaled down to fit page (#1803)
 * prevent inline image from rendering multiple times if fallback font is used for alt text (#1858)

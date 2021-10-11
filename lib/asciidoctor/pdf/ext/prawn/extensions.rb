@@ -76,6 +76,27 @@ module Asciidoctor
         reference_bounds.height
       end
 
+      # workaround for https://github.com/prawnpdf/prawn/issues/1121
+      def generate_margin_box
+        page_w, page_h = (page = state.page).dimensions.slice 2, 2
+        page_m = page.margins
+        prev_margin_box, @margin_box = @margin_box, (::Prawn::Document::BoundingBox.new self, nil, [page_m[:left], page_h - page_m[:top]], width: page_w - page_m[:left] - page_m[:right], height: page_h - page_m[:top] - page_m[:bottom])
+
+        # update bounding box if not flowing from the previous page
+        unless @bounding_box&.parent
+          prev_margin_box = @bounding_box
+          @bounding_box = @margin_box
+        end
+
+        # maintains indentation settings across page breaks
+        if prev_margin_box
+          @margin_box.add_left_padding prev_margin_box.total_left_padding
+          @margin_box.add_right_padding prev_margin_box.total_right_padding
+        end
+
+        nil
+      end
+
       # Set the margins for the current page.
       #
       def set_page_margin margin
@@ -190,7 +211,7 @@ module Asciidoctor
       #  }
       #
       def register_font data
-        font_families.update data.each_with_object({}) {|(key, val), accum| accum[key.to_s] = val }
+        font_families.update data.transform_keys(&:to_s)
       end
 
       # Enhances the built-in font method to allow the font
@@ -553,7 +574,7 @@ module Asciidoctor
 
       # TODO: memoize the result
       def inflate_padding padding
-        padding = [*(padding || 0)].slice 0, 4
+        padding = (Array padding || 0).slice 0, 4
         case padding.size
         when 1
           [padding[0], padding[0], padding[0], padding[0]]
@@ -880,6 +901,11 @@ module Asciidoctor
         scratch_bounds.instance_variable_set :@width, original_width
         whole_pages = scratch.page_number - start_page_number
         [(whole_pages * full_page_height + partial_page_height), whole_pages, partial_page_height]
+      end
+
+      def with_dry_run &block
+        total_height, = dry_run(&block)
+        instance_exec total_height, &block
       end
 
       # Attempt to keep the objects generated in the block on the same page

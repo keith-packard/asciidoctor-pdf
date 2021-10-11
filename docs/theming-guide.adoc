@@ -141,7 +141,7 @@ Otherwise, Asciidoctor PDF will use built-in AFM fonts, which can result in miss
 
 [TIP]
 ====
-Instead of creating a theme from scratch, another option is to download the https://github.com/asciidoctor/asciidoctor-pdf/blob/master/data/themes/default-theme.yml[default-theme.yml] file from the source repository.
+Instead of creating a theme from scratch, another option is to download the https://github.com/asciidoctor/asciidoctor-pdf/blob/main/data/themes/default-theme.yml[default-theme.yml] file from the source repository.
 Save the file using a unique name (e.g., _custom-theme.yml_) and start hacking on it.
 
 Alternatively, you can snag the file from your local installation using the following command:
@@ -752,8 +752,9 @@ A sans-serif font that provides a very complete set of Unicode glyphs.
 Cannot be styled as italic, bold or bold_italic.
 Used as the fallback font in the `default-with-fallback-font` theme.
 
-TIP: If you want to specify the location of custom fonts using the `pdf-fontsdir` attribute, yet still be able to use the bundled fonts, you need to refer to the bundled fonts using the `GEM_FONTS_DIR` token.
-To do so, you can either a) prefix the path of the bundled font in the theme file with the segment `GEM_FONTS_DIR` (e.g., `GEM_FONTS_DIR/mplus1p-regular-fallback.ttf`, or b) use relative paths in the theme file and include `GEM_FONT_DIR` in the value of the `pdf-fontsdir` attribute separated by the location of your custom fonts using a semi-colon (e.g., `"path/to/your/fonts;GEM_FONTS_DIR"`).
+TIP: The default themes in 1.5.x do not include the `GEM_FONTS_DIR` prefix in the path of the bundled font files.
+Therefore, if you want to specify the location of custom fonts using the `pdf-fontsdir` attribute, yet still be able to use the bundled fonts, you need to refer to the bundled fonts using the `GEM_FONTS_DIR` token.
+To do so, you can either a) redeclare the bundle fonts in your theme and prefix the path with the segment `GEM_FONTS_DIR` (e.g., `GEM_FONTS_DIR/mplus1p-regular-fallback.ttf`, or b) include `GEM_FONT_DIR` in the value of the `pdf-fontsdir` attribute separated by the location of your custom fonts using a semi-colon (e.g., `"path/to/your/fonts;GEM_FONTS_DIR"`).
 
 === Custom Fonts
 
@@ -963,9 +964,9 @@ This nested structure is for organizational purposes only.
 All keys are flatted when the theme is loaded (e.g., `align` nested under `base` becomes `base-align`).
 
 The converter uses the values of these keys to control how most elements are arranged and styled in the PDF.
-The default values listed in this section get inherited from the https://github.com/asciidoctor/asciidoctor-pdf/blob/master/data/themes/base-theme.yml[base theme].
+The default values listed in this section get inherited from the https://github.com/asciidoctor/asciidoctor-pdf/blob/main/data/themes/base-theme.yml[base theme].
 
-IMPORTANT: The https://github.com/asciidoctor/asciidoctor-pdf/blob/master/data/themes/default-theme.yml[default theme] has a different set of values which are not shown in this guide.
+IMPORTANT: The https://github.com/asciidoctor/asciidoctor-pdf/blob/main/data/themes/default-theme.yml[default theme] has a different set of values which are not shown in this guide.
 
 When creating a theme, all keys are optional.
 Required keys are provided by the base theme.
@@ -3383,8 +3384,9 @@ The keys in this category control the arrangement of block images.
     max-width: fit-content
 |===
 
-. Only applies to block images.
-If specified, this value takes precedence over the value of the `width` attribute on the image macro, but not over the value of the `pdfwidth` attribute.
+. Only applies to block images that don't have either a `pdfwidth` or `scaledwidth` attribute on the image macro.
+If specified, this value takes precedence over the value of the `width` attribute on the image macro, but not over the value of the `pdfwidth` or `scaledwidth` attributes.
+This key accepts the same values as the `pdfwidth` attribute.
 . The border is only used if a border color is specified, the border width is specified, the border width is greater than 0, and the `noborder` role is not present.
 The border is drawn above the image on the inside of the box reserved for the image.
 . The value `auto` means the border should expand to fit the width of the container (i.e., full width) instead of the image.
@@ -5407,12 +5409,12 @@ You may need to scale the glyph so it fits properly in the art box.
 IMPORTANT: If you're copying a non-visible character, be sure to set the width to 0 using menu:Metrics[Set Width...], enter 0 into *Set Width To*, then click btn:[OK].
 
 When you're done, save the font with the old-style kern table enabled.
-To do so, select menu:File[Generate Fonts...], click btn:[Options], and make sure only the following options are selected (equivalent to the flags 0x90 + 0x08):
+To do so, select menu:File[Generate Fonts...], select *TrueType*, click btn:[Options], make sure _only_ the following options are checked (equivalent to the flags 0x90 + 0x08):
 
 * [x] OpenType
  ** [x] Old style 'kern'
 
-Then click btn:[Generate] to generate and save the font.
+Then click btn:[OK], then uncheck *Validate Before Saving*, and finally click btn:[Generate] to generate and save the font.
 
 Your font file is now ready to be used with Asciidoctor PDF.
 
@@ -5422,5 +5424,5 @@ Performing all this font modification manually can be tedious (not to mention ha
 Fortunately, FontForge provides a {url-fontforge-scripting}[scripting interface], which you can use to automate the process.
 
 In fact, that's what we use to prepare the fonts that are bundled with Asciidoctor PDF.
-You can find that FontForge script, the Bash script that calls it, and the Docker image in which it is run in the https://github.com/asciidoctor/asciidoctor-pdf/tree/master/scripts[scripts directory] of this project.
+You can find that FontForge script, the Bash script that calls it, and the Docker image in which it is run in the https://github.com/asciidoctor/asciidoctor-pdf/tree/main/scripts[scripts directory] of this project.
 You can use that script as a starting point or reference for your own font preparation / modification script.
