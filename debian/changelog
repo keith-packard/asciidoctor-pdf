@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (1.6.1-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- Keith Packard <keithp@keithp.com>  Mon, 11 Oct 2021 12:15:53 -0700
+
 ruby-asciidoctor-pdf (1.5.4-3) unstable; urgency=medium
 
   * Fix broken dependency on prawn/templates.
