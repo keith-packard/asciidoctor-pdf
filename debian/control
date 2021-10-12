@@ -5,16 +5,15 @@ Maintainer: Keith Packard <keithp@keithp.com>
 Build-Depends: debhelper-compat (= 13),
                gem2deb,
                ruby (>= 1:2.5.1),
-               ruby-asciidoctor (>= 1.5.3),
+               ruby-asciidoctor (>= 2.0),
                ruby-concurrent (>= 1.1~),
-               ruby-prawn (>= 2.2.0),
-               ruby-prawn-icon (>= 2.5.0),
-               ruby-prawn-svg (>= 0.31.0),
+               ruby-prawn (>= 2.3.0),
+               ruby-prawn-icon (>= 3.0.0),
+               ruby-prawn-svg (>= 0.32.0),
                ruby-prawn-table (>= 0.2.0),
                ruby-safe-yaml (>= 1.0.0),
-               ruby-thread-safe (>= 0.3.0),
                ruby-treetop (>= 1.6.0)
-Standards-Version: 4.5.1
+Standards-Version: 4.6.0.1
 Vcs-Git: https://salsa.debian.org/keithp/asciidoctor-pdf.git
 Vcs-Browser: https://salsa.debian.org/keithp/asciidoctor-pdf
 Homepage: https://github.com/asciidoctor/asciidoctor-pdf
@@ -26,17 +25,15 @@ Package: ruby-asciidoctor-pdf
 Architecture: all
 XB-Ruby-Versions: ${ruby:Versions}
 Depends: ruby (>= 1:2.5.1),
-         ruby-asciidoctor (>= 1.5.0),
-         ruby-concurrent (>= 1.1~),
-         ruby-prawn (>= 2.2.0),
-         ruby-prawn-icon (>= 1.4.0),
-         ruby-prawn-svg (>= 0.31.0),
-         ruby-prawn-table (>= 0.2.2),
-         ruby-safe-yaml (>= 1.0.4),
-         ruby-thread-safe (>= 0.3.6),
-         ruby-treetop (>= 1.5.3),
-         ${misc:Depends},
-         ${shlibs:Depends}
+	 ruby-asciidoctor (>= 2.0),
+	 ruby-concurrent (>= 1.1~),
+	 ruby-prawn (>= 2.3.0),
+	 ruby-prawn-icon (>= 3.0.0),
+	 ruby-prawn-svg (>= 0.32.0),
+	 ruby-prawn-table (>= 0.2.0),
+	 ruby-safe-yaml (>= 1.0.0),
+	 ruby-treetop (>= 1.6.0),
+         ${misc:Depends}
 Suggests: ruby-rouge
 Description: Converts AsciiDoc documents to PDF using Prawn
  An extension for Asciidoctor that converts AsciiDoc documents to PDF
