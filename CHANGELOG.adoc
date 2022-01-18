@@ -5,6 +5,17 @@
 This document provides a high-level view of the changes to the {project-name} by release.
 For a detailed view of what has changed, refer to the {uri-repo}/commits/v1.6.x[commit history] on GitHub.
 
+== 1.6.2 (2021-12-31) - @mojavelinux
+
+Enhancements::
+
+* show URL of link for any media type when show-link-uri is set (#951)
+* do not show URL of link when media type is screen or prepress when show-link-uri is unset (#951)
+
+Bug Fixes::
+
+* update patches for `PDF::Core.real` and `PDF::Core.real_params` to prevent scientific notation ending up in PDF (#1983) (@rillbert)
+
 == 1.6.1 (2021-09-04) - @mojavelinux
 
 Enhancements::
