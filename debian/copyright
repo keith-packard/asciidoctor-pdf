@@ -16,7 +16,7 @@ Copyright: 2011 Andrew Vos
 License: MIT
 
 Files: debian/*
-Copyright: 2018 Keith Packard
+Copyright: 2018-2022 Keith Packard
 License: MIT
 Comment: the Debian packaging is licensed under the same terms as the original package.
 
