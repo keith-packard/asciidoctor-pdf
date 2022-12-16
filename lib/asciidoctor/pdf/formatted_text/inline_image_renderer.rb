@@ -2,6 +2,8 @@
 
 module Asciidoctor::PDF::FormattedText
   module InlineImageRenderer
+    include ::Asciidoctor::Logging
+
     module_function
 
     # Embeds the image object in this fragment into the document in place of the
@@ -26,20 +28,15 @@ module Asciidoctor::PDF::FormattedText
         image_top = fragment.top - ((fragment.height - data[:image_height]) / 2.0)
       end
       image_left = fragment.left + ((fragment.width - data[:image_width]) / 2.0)
-      case data[:image_format]
-      when 'svg'
-        (image_obj = data[:image_obj]).options[:at] = [image_left, image_top]
-        # NOTE prawn-svg messes with the cursor; use float to workaround
-        # NOTE prawn-svg 0.24.0, 0.25.0, & 0.25.1 didn't restore font after call to draw (see mogest/prawn-svg#80)
+      if Prawn::SVG::Interface === (image_obj = data[:image_obj])
+        image_obj.options[:at] = [image_left, image_top]
+        # NOTE: prawn-svg messes with the cursor; use float to workaround
         pdf.float do
           pdf.character_spacing(data[:actual_character_spacing]) { image_obj.draw }
-          image_obj.document.warnings.each do |img_warning|
-            # NOTE shim logger can't be imported into a module, so use the one from the PDF document instead
-            pdf.logger.warn %(problem encountered in image: #{data[:image_path]}; #{img_warning})
-          end
+          image_obj.document.warnings.each {|img_warning| logger.warn %(problem encountered in image: #{data[:image_path]}; #{img_warning}) }
         end
       else
-        pdf.embed_image data[:image_obj], data[:image_info], at: [image_left, image_top], width: data[:image_width], height: data[:image_height]
+        pdf.embed_image image_obj, data[:image_info], at: [image_left, image_top], width: data[:image_width], height: data[:image_height]
       end
       # ...or use the public interface, loading the image again
       #pdf.image data[:image_path], at: [image_left, image_top], width: data[:image_width]

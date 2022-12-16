@@ -6,6 +6,7 @@ team must conquer and vanquish on their journey to discovering the true power of
 Open Source.
 :organization: Company Name
 :doctype: book
+:preface-title: Preface
 // Settings:
 :experimental:
 :reproducible:
@@ -14,9 +15,7 @@ Open Source.
 :sectnums:
 :toc:
 :toclevels: 3
-ifeval::["{asciidoctor-version}" < "1.5.7"]
-:legacy-footnoteref:
-endif::[]
+:xrefstyle: short
 ifdef::backend-pdf[]
 :pdf-theme: chronicles
 :pdf-themesdir: {docdir}
@@ -30,12 +29,16 @@ endif::[]
 :uri-stbernardusabt12: http://www.sintbernardus.be/stbernardusabt12.php?l=en
 :uri-wolpertinger: http://en.wikipedia.org/wiki/Wolpertinger
 
+[%notitle]
+--
 [abstract]
 {description}
+--
 
 == It's a City Under Siege
 
 This journey begins one late Monday afternoon at {uri-devoxx}[((Devoxx))].
+(((Conference,Devoxx)))
 Our team needs coffee, _desperately_, but none of us dare open the theater doors...
 
 During the {uri-devoxx-top-talks}[opening university session], a script-happy warlock inadvertently released a legion of Wolpertingers!
@@ -44,29 +47,18 @@ To leave now would mean *code dismemberment and certain death*.
 Behold -> the horror!
 
 .Wolpertinger, stuffed
-[.left.thumb]
-image::wolpertinger.jpg[Wolpertinger,pdfwidth=50%,link={uri-wolpertinger}]
+image::wolpertinger.jpg[Wolpertinger,pdfwidth=50%,link={uri-wolpertinger},float=left,role=thumb]
 
 (((Wolpertinger)))
 (((Ravenous Beast,Wolpertinger)))
 You may not be familiar with these {uri-wolpertinger}[ravenous beasts].
 Trust us, they'll eat your shorts and suck loops from your code.
 In light of this danger, we've searched high and wide for the security crew's defensive operations manual.
-ifndef::legacy-footnoteref[]
 We can't find it and the DefOps{empty}footnote:defops[DefOps is a portmanteau of "`defensive`" and "`operations`".] werewolves haven't returned from their rendezvous at Bier Central.
-endif::[]
-ifdef::legacy-footnoteref[]
-We can't find it and the DefOps{empty}footnoteref:[defops,DefOps is a portmanteau of "`defensive`" and "`operations`".] werewolves haven't returned from their rendezvous at Bier Central.
-endif::[]
 They've either eaten each other or fallen victim to the Wolpertingers roaming the streets of ((Antwerp)).
 Quick, hit kbd:[Ctrl,Alt,Backspace] or select menu:File[Quit] and let's bail out of here!
 
-ifndef::legacy-footnoteref[]
 WARNING: Working with DefOps{empty}footnote:defops[] werewolves leads to howling and trying to train aggressive regular expressions with Pavlovian reinforcement.
-endif::[]
-ifdef::legacy-footnoteref[]
-WARNING: Working with DefOps{empty}footnoteref:[defops] werewolves leads to howling and trying to train aggressive regular expressions with Pavlovian reinforcement.
-endif::[]
 
 _Weak light from the hallway trickled across the theater, chased by a distant scream._
 
@@ -83,7 +75,7 @@ Here's some &#x20ac;.
 Crystalline XML tags relentlessly bombarded the theater.
 
 .XML tags
-[source,xml]
+[,xml]
 ----
 <author id="1">
   <personname>
@@ -93,12 +85,7 @@ Crystalline XML tags relentlessly bombarded the theater.
 </author>
 ----
 
-ifndef::legacy-footnoteref[]
 Despite the assault, we continued our pursuit to draft a DefOps{empty}footnote:defops[] plan.
-endif::[]
-ifdef::legacy-footnoteref[]
-Despite the assault, we continued our pursuit to draft a DefOps{empty}footnoteref:[defops] plan.
-endif::[]
 
 .DefOps Plan
 ====
@@ -284,7 +271,7 @@ Install Prawn:
 Then create your first PDF document in Ruby!
 
 .Generates a basic PDF document using Prawn
-[source,ruby]
+[,ruby]
 ----
 require 'prawn' # <1>
 
@@ -298,7 +285,7 @@ end
 
 How about some source code that styles code? So meta!
 
-[source,css]
+[,css]
 ----
 code {
   padding: 2px 4px;
@@ -314,7 +301,7 @@ code {
 Where could we go without some Java(TM)?
 Naturally, some autosizing is necessary.
 
-[source%autofit,java]
+[%autofit,java]
 ----
 package org.javaee7.cdi.events;
 
@@ -375,7 +362,7 @@ We already showed you an XML example in <<ravages>>, a language we often rant ab
 
 I'll trade you a little table for some of that bark.
 
-[cols=4,frame=topbot,grid=rows]
+[cols=4,frame=ends,grid=rows]
 |===
 |Column 1 |Column 2 |Column 3 |Column 4
 
@@ -433,13 +420,13 @@ its
 breaking
 point.
 
-[NOTE]
+[NOTE%unbreakable]
 .What happens if there is both a field and a method with the same name?
 ====
 Back to the previous example, suppose that we have both a field and a method with the same name, as in:
 
 .Java class with a field and method that share the same name
-[source,java]
+[,java]
 ----
 public class Foo {
   public String bar;
@@ -454,7 +441,7 @@ public class Foo {
 Hence, the following Golo code will resolve the `bar()` method, not the `bar` field:
 
 .Golo picks the method over the field with the same name
-[source,golo]
+[,golo]
 ----
 let foo = Foo()
 
@@ -510,7 +497,7 @@ Here's some content inside an open block.
 == Credits
 
 .Brought to you with icon:heart[set=fas,role=love] by OpenDevise
-[%header%footer,cols="2,2s,^4",grid=rows,frame=topbot,width=75%,caption=]
+[%header%footer,cols="2,2s,^4",grid=rows,frame=ends,width=75%,caption=]
 |===
 |Name |Title |Alias
 

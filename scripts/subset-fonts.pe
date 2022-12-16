@@ -38,12 +38,12 @@
 # NOTE best choice for Prawn & web is 0x00 + 0x800 + 0x08
 
 genflags = 0x90 + 0x08
-copy_fonts = ["NotoSerif-Regular.ttf", "NotoSerif-Bold.ttf", "NotoSerif-Italic.ttf", "NotoSerif-BoldItalic.ttf", "mplus-1p-regular.ttf"]
+copy_fonts = ["NotoSerif-Regular.ttf", "NotoSerif-Bold.ttf", "NotoSerif-Italic.ttf", "NotoSerif-BoldItalic.ttf", "NotoSans-Regular.ttf", "NotoSans-Bold.ttf", "NotoSans-Italic.ttf", "NotoSans-BoldItalic.ttf", "mplus-1p-regular.ttf"]
 copy_scripts = ["subset"]
-emoji_fonts = ["NotoEmoji-Regular.ttf"]
+emoji_fonts = ["NotoEmoji.ttf"]
 emoji_scripts = ["subset"]
 code_fonts = ["mplus-1mn-light.ttf", "mplus-1mn-regular.ttf", "mplus-1mn-medium.ttf", "mplus-1mn-bold.ttf"]
-code_scripts = ["ascii", "subset"]
+code_scripts = ["subset"]
 
 if ($argc >= 2)
   source_dir = $argv[1]
@@ -85,7 +85,7 @@ while (fi < num_copy_fonts)
     new_filepath = output_dir + "/" + new_filename
     if (is_noto)
       Print("Stealing glyphs from other fonts...")
-      if (new_basename == "notoserif-regular")
+      if (new_basename == "notoserif-regular" || new_basename == "notosans-regular")
         Print("Stealing ballot boxes from FontAwesome...")
         # Grab ballot boxes from FontAwesome
         Open(fa_src_filepath)
@@ -135,7 +135,7 @@ while (fi < num_copy_fonts)
     # Basic Latin (e.g., English)
     SelectMore(0u0020,0u007e)
     # Latin-1 Supplement (covers core Western European languages)
-    SelectMore(0u00a1,0u00fd)
+    SelectMore(0u00a1,0u00ff)
     # Latin Extended-A (covers Czech, Dutch, Polish & Turkish, esp. names)
     SelectMore(0u0100,0u017f)
     # General Punctuation (most of it) (e.g., dashes, curved quotes, bullet, ellipsis)
@@ -161,8 +161,9 @@ while (fi < num_copy_fonts)
     SelectMore(0u20ac)
     # Trademark sign (selected from Letterlike Symbols set)
     SelectMore(0u2122)
-    # Mathematical Operators (e.g., infinity, sum, partial differential)
+    # Mathematical Operators (e.g., infinity, sum, partial differential, numero)
     SelectMore(0u2200,0u22ff)
+    SelectMore(0u2116)
     # Geometric Shapes (e.g., list bullets)
     SelectMore(0u25a0,0u25ff)
     # Greek (frequently used for math and bullets)
@@ -170,7 +171,7 @@ while (fi < num_copy_fonts)
     if (is_noto)
       # Single arrows (present in Noto Serif, but misaligned) and double arrows (imported from M+ 1p)
       SelectMoreSingletons(0u2190,0u2192,0u21d0,0u21d2)
-      if (new_basename == "notoserif-regular")
+      if (new_basename == "notoserif-regular" || new_basename == "notosans-regular")
         # Ballot boxes (imported from FontAwesome)
         SelectMore(0u2610,0u2611)
       endif
@@ -184,8 +185,8 @@ while (fi < num_copy_fonts)
       SelectMore(0u21d0,0u21d5)
       # Ballot boxes
       SelectMore(0u2610,0u2611)
-      # Check mark
-      SelectMore(0u2713)
+      # Check marks
+      SelectMore(0u2713,0u2714)
     endif
     if (script == "latin-ext" || script == "latin-ext-cyrillic" || script == "fallback")
       # Latin Extended-B
@@ -216,6 +217,9 @@ while (fi < num_copy_fonts)
       SelectMore(0u0168,0u0169)
       SelectMore(0u01a0,0u01b0)
       SelectMore(0u1ea0,0u1ef9)
+      # Small Caps
+      SelectMoreSingletons(0u1d00,0u0299,0u1d04,0u1d05,0u1d07,0ua730,0u0262,0u029c,0u026a,0u1d0a,0u1d0b,0u029f,0u1d0d)
+      SelectMoreSingletons(0u0274,0u1d0f,0u1d18,0ua7af,0u0280,0ua731,0u1d1b,0u1d1c,0u1d20,0u1d21,0u028f,0u1d22,0u01eb)
       if (is_mplus)
         # CJK Symbols and Punctuation (not present in mainstream Noto Serif fonts)
         SelectMore(0u3000,0u303f)
@@ -227,6 +231,8 @@ while (fi < num_copy_fonts)
         SelectMore(0uff00,0uffef)
         # CJK Unified Ideographs (for Japanese, aka kanji) (not present in mainstream Noto Serif fonts)
         SelectMore(0u4e00,0u9faf)
+        # Additional math characters (lceil, rceil, lfloor, rfloor)
+        SelectMoreSingletons(0u2308,0u2309,0u230a,0u230b)
       endif
     endif
     #if (script == "fallback")
@@ -377,7 +383,7 @@ while (fi < num_code_fonts)
     SelectMore(0u0020,0u007e)
     if (script == "subset")
       # Latin-1 Supplement (covers core Western European languages)
-      SelectMore(0u00a1,0u00fd)
+      SelectMore(0u00a1,0u00ff)
       # Latin Extended-A (covers Czech, Dutch, Polish & Turkish, esp. names)
       SelectMore(0u0100,0u017f)
       # General Punctuation (e.g., em dashes, arrows, ellipsis, trademark)
@@ -388,6 +394,8 @@ while (fi < num_code_fonts)
       SelectMore(0u20ac)
       # Cyrillic
       SelectMore(0u0400,0u04ff)
+      # Check marks
+      SelectMore(0u2713,0u2714)
     endif
     # No-break space
     SelectMore(0u00a0)

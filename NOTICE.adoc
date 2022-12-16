@@ -1,7 +1,7 @@
 = Asciidoctor PDF
 OpenDevise Inc.; Asciidoctor Project
 
-Copyright (C) 2014-2020 OpenDevise Inc. and the Asciidoctor Project.
+Copyright (C) 2014-present OpenDevise Inc. and the Asciidoctor Project.
 
 Please visit the Asciidoctor project site for more information:
 
@@ -18,23 +18,35 @@ See the License for the specific language governing permissions and limitations 
 
 == Third-party licensed work
 
-M+ OUTLINE FONTS (M+ TESTFLIGHT 058)::
+M+ OUTLINE FONTS (M+ TESTFLIGHT 063a)::
   The M+ OUTLINE FONTS are used for literal text, annotation numbers and fallback characters and are bundled in the PDF file.
   These fonts are free software and are designed and maintained by Coji Morishita.
   Unlimited permission is granted to use, copy, and distribute them, with or without modification, either commercially or noncommercially.
   THESE FONTS ARE PROVIDED "AS IS" WITHOUT WARRANTY.
+  (Effectively the same as the Zero-Clause BSD License: https://opensource.org/licenses/0BSD).
 
-  - http://mplus-fonts.sourceforge.jp/mplus-outline-fonts/index-en.html
+  - http://mplus-fonts.osdn.jp/about-en.html
 
-Noto Serif Font (v2015-06-05)::
+Noto Serif and Noto Sans Fonts (86b2e553c3e3e4d6614dadd1fa0a7a6dafd74552)::
   Noto is font family developed by the Google Internationalization Team that aims to support all the world's languages.
   The Noto Serif font is used for headings and body copy and is bundled in the PDF file.
+  The Noto Sans font is provided as an alternative for headings and body copy and is bundled in the PDF file.
   The Noto fonts are licensed under the Apache 2.0 License.
   You may obtain a copy of the license at:
 
   http://www.apache.org/licenses/LICENSE-2.0
 
-  - https://code.google.com/p/noto/
+  - https://github.com/googlefonts/noto-fonts
+
+Noto Emoji Font (16151a2312a1f8a7d79e91789d3cfe24559d61f7)::
+  Noto is font family developed by the Google Internationalization Team that aims to support all the world's languages.
+  The Noto Emoji font is used to support emoji characters encoded in the document.
+  The Noto fonts are licensed under the Apache 2.0 License.
+  You may obtain a copy of the license at:
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+  - https://github.com/googlefonts/noto-emoji
 
 Font Awesome Icon Font (v5.4)::
   Font Awesome (@fontawesome), the iconic font designed for Bootstrap by David Gandy (@davegandy), is used for the admonition icons and other icons in author's content and bundled in the PDF file.
@@ -54,11 +66,9 @@ RomanNumeral class::
 
   - https://github.com/AndrewVos/roman-numerals
 
-PrawnCodeRayEncoder class::
-  The PrawnCodeRayEncoder class, which is used for syntax highlighting source code for use with Prawn, is borrowed from the Prawn project and modified for the purpose of this application.
-  The PrawnEncoder was written by Felipe Doria and is licensed under the GPLv3 license.
-
-  http://www.gnu.org/licenses/gpl-3.0.html 
+Asciidoctor::Prawn::CodeRayEncoder class::
+  The Asciidoctor::Prawn::CodeRayEncoder class, which is used for syntax highlighting source code for use with Prawn, is borrowed from the Prawn project and modified for the purpose of this application.
+  The PrawnEncoder was written by Felipe Doria and may be used under Matz's original licensing terms for Ruby, the GPLv2 license, or the GPLv3 license.
 
   - https://github.com/prawnpdf/prawn
 

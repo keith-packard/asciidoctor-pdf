@@ -5,25 +5,14 @@
 # This file was copied from Prawn (manual/syntax_highlight.rb) and
 # modified for use with Asciidoctor PDF.
 #
-# Prawn is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Prawn is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Prawn. If not, see <http://www.gnu.org/licenses/>.
+# Since the file originates from the Prawn project, it shares the Prawn
+# license. Thus, the file may be used under Matz's original licensing terms for
+# Ruby, the GPLv2 license, or the GPLv3 license.
 #
 # Copyright (C) Felipe Doria
-# Copyright (C) 2014 OpenDevise Inc. and the Asciidoctor Project
+# Copyright (C) 2014-present OpenDevise Inc. and the Asciidoctor Project
 #
 ######################################################################
-
-require 'coderay'
 
 # Registers a to_prawn method with CodeRay. The method returns an array of hashes to be
 # used with Prawn::Text.formatted_text(array).
@@ -80,7 +69,7 @@ module Asciidoctor
         super
         @out  = []
         @open = []
-        # NOTE tracks whether text token begins at the start of a line
+        # NOTE: tracks whether text token begins at the start of a line
         @start_of_line = true
       end
 
@@ -88,17 +77,17 @@ module Asciidoctor
         if text == LF
           @out << { text: text }
           @start_of_line = true
-        # NOTE text is nil and kind is :error when CodeRay ends parsing on an error
+        # NOTE: text is nil and kind is :error when CodeRay ends parsing on an error
         elsif text
-          # NOTE add guard character to prevent Prawn from trimming indentation
+          # NOTE: add guard character to prevent Prawn from trimming indentation
           text[0] = GuardedIndent if @start_of_line && (text.start_with? ' ')
           text.gsub! InnerIndent, GuardedInnerIndent if text.include? InnerIndent
 
-          # NOTE this optimization assumes we don't support/use background colors
+          # NOTE: this optimization assumes we don't support/use background colors
           if text.rstrip.empty?
             @out << { text: text }
           else
-            # QUESTION should we default to no color?
+            # QUESTION: should we default to no color?
             @out << { text: text, color: (COLORS[kind] || COLORS[@open[-1]] || COLORS[:default]) }
           end
           @start_of_line = text.end_with? LF

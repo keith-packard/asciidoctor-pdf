@@ -54,6 +54,15 @@ describe Asciidoctor::PDF::FormattedText::Transform do
     (expect fragments[1][:text]).to eql 'new'
   end
 
+  it 'should not create fragment for empty element' do
+    input = 'foo <strong></strong> bar'
+    parsed = parser.parse input
+    fragments = subject.apply parsed.content
+    (expect fragments).to have_size 2
+    (expect fragments[0][:text]).to eql 'foo'
+    (expect fragments[1][:text]).to eql ' bar'
+  end
+
   it 'should create fragment with custom font name' do
     input = '<font name="Helvetica">Helvetica</font>'
     parsed = parser.parse input
@@ -73,7 +82,7 @@ describe Asciidoctor::PDF::FormattedText::Transform do
   end
 
   it 'should create fragment with custom hex color' do
-    input = '<color rgb="#ff0000">red</color>'
+    input = '<font color="#ff0000">red</font>'
     parsed = parser.parse input
     fragments = subject.apply parsed.content
     (expect fragments).to have_size 1
@@ -81,13 +90,51 @@ describe Asciidoctor::PDF::FormattedText::Transform do
     (expect fragments[0][:color]).to eql 'ff0000'
   end
 
+  it 'should create fragment with custom shorthand hex color' do
+    input = '<font color="#f00">red</font>'
+    parsed = parser.parse input
+    fragments = subject.apply parsed.content
+    (expect fragments).to have_size 1
+    (expect fragments[0][:text]).to eql 'red'
+    (expect fragments[0][:color]).to eql 'ff0000'
+  end
+
+  it 'should not set color on fragment if hex value is invalid' do
+    input = '<font color="#ff">red</font>'
+    parsed = parser.parse input
+    fragments = subject.apply parsed.content
+    (expect fragments).to have_size 1
+    (expect fragments[0][:text]).to eql 'red'
+    (expect fragments[0][:color]).to be_nil
+  end
+
   it 'should create fragment with custom cmyk color' do
-    input = '<color rgb="[50, 100, 0, 0]">color</color>'
+    input = '<font color="[50.5, 100, 0, 0]">color</font>'
     parsed = parser.parse input
     fragments = subject.apply parsed.content
     (expect fragments).to have_size 1
     (expect fragments[0][:text]).to eql 'color'
-    (expect fragments[0][:color]).to eql [50, 100, 0, 0]
+    (expect fragments[0][:color]).to eql [50.5, 100, 0, 0]
+  end
+
+  it 'should process a with only class attribute' do
+    pdf_theme = build_pdf_theme role_symlink_font_color: '0000AA'
+    input = '<a class="symlink">Asciidoctor</a>'
+    parsed = parser.parse input
+    fragments = (subject.class.new theme: pdf_theme).apply parsed.content
+    (expect fragments).to have_size 1
+    (expect fragments[0][:text]).to eql 'Asciidoctor'
+    (expect fragments[0][:color]).to eql '0000AA'
+  end
+
+  it 'should apply smallcaps transform to phrase' do
+    pdf_theme = build_pdf_theme role_sc_text_transform: 'smallcaps'
+    input = 'HTML stands for <strong class="sc">HyperText Markup Language</strong>'
+    parsed = parser.parse input
+    fragments = (subject.class.new theme: pdf_theme).apply parsed.content
+    (expect fragments).to have_size 2
+    (expect fragments[1][:text]).to eql 'HʏᴘᴇʀTᴇxᴛ Mᴀʀᴋᴜᴘ Lᴀɴɢᴜᴀɢᴇ'
+    (expect fragments[1][:styles]).to include :bold
   end
 
   it 'should return nil if text contains invalid markup' do

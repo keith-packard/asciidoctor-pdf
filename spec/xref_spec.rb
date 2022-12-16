@@ -75,6 +75,21 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       (expect (pdf.page 2).text).to include 'Chapter B'
     end
 
+    it 'should short-circuit circular reference in section title' do
+      pdf = to_pdf <<~'EOS', analyze: true
+      [#a]
+      == A <<b>>
+
+      [#b]
+      == B <<a>>
+      EOS
+
+      (expect pdf.lines).to eql ['A B [a]', 'B [a]']
+      lines = pdf.text.map {|it| it[:y] }.uniq
+      (expect pdf.find_unique_text 'B [a]', font_color: '428BCA', y: lines[0]).not_to be_nil
+      (expect pdf.find_unique_text '[a]', font_color: '428BCA', y: lines[1]).not_to be_nil
+    end
+
     it 'should reference section with ID that contains non-ASCII characters' do
       pdf = to_pdf <<~'EOS'
       == Über Étudier
@@ -87,7 +102,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       (expect annotations).to have_size 1
       (expect annotations[0][:Dest]).to eql hex_encoded_id
       (expect (pdf.page 1).text).to include 'See Über Étudier.'
-    end if RUBY_VERSION >= '2.4.0'
+    end
 
     it 'should create reference to a block by explicit ID' do
       pdf = to_pdf <<~'EOS'
@@ -120,6 +135,23 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       (expect (pdf.page 2).text).to include 'table'
     end
 
+    it 'should create reference to an anchor in a paragraph' do
+      pdf = to_pdf <<~'EOS'
+      Jump to the <<explanation>>.
+
+      <<<
+
+      [[explanation,explanation]]This is the explanation.
+      EOS
+
+      names = get_names pdf
+      (expect names).to have_key 'explanation'
+      annotations = get_annotations pdf, 1
+      (expect annotations).to have_size 1
+      (expect annotations[0][:Dest]).to eql 'explanation'
+      (expect (pdf.page 1).text).to include 'explanation'
+    end
+
     it 'should create reference to a list item with an anchor' do
       pdf = to_pdf <<~'EOS'
       Jump to the <<first-item>>.
@@ -134,11 +166,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       annotations = get_annotations pdf, 1
       (expect annotations).to have_size 1
       (expect annotations[0][:Dest]).to eql 'first-item'
-      if asciidoctor_1_5_7_or_better?
-        (expect (pdf.page 1).text).to include 'first item'
-      else
-        (expect (pdf.page 1).text).to include '[first-item]'
-      end
+      (expect (pdf.page 1).text).to include 'first item'
     end
 
     it 'should create reference to a table cell with an anchor' do
@@ -157,11 +185,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       annotations = get_annotations pdf, 1
       (expect annotations).to have_size 1
       (expect annotations[0][:Dest]).to eql 'first-cell'
-      if asciidoctor_1_5_7_or_better?
-        (expect (pdf.page 1).text).to include 'first cell'
-      else
-        (expect (pdf.page 1).text).to include '[first-cell]'
-      end
+      (expect (pdf.page 1).text).to include 'first cell'
     end
 
     it 'should show ID enclosed in square brackets if reference cannot be resolved' do
@@ -179,7 +203,40 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
   end
 
   context 'interdocument' do
-    it 'should convert interdocument xrefs to internal references' do
+    it 'should convert interdocument xref to PDF link' do
+      input_file = Pathname.new fixture_file 'reference-to-sibling.adoc'
+      pdf = to_pdf input_file
+      p2_annotations = get_annotations pdf, 2
+      (expect p2_annotations).to have_size 2
+      book_ref = p2_annotations[0]
+      (expect book_ref[:Subtype]).to be :Link
+      (expect book_ref[:A][:S]).to eql :URI
+      (expect book_ref[:A][:URI]).to eql 'book.pdf'
+    end
+
+    it 'should convert deep interdocument xref to PDF link with fragment' do
+      input_file = Pathname.new fixture_file 'reference-to-sibling.adoc'
+      pdf = to_pdf input_file
+      p2_annotations = get_annotations pdf, 2
+      (expect p2_annotations).to have_size 2
+      first_steps_ref = p2_annotations[1]
+      (expect first_steps_ref[:Subtype]).to be :Link
+      (expect first_steps_ref[:A][:S]).to eql :URI
+      (expect first_steps_ref[:A][:URI]).to eql 'book.pdf#_first_steps'
+    end
+
+    it 'should use path as fallback text for interdocument xref' do
+      pdf = to_pdf 'Refer to the xref:admin-guide.adoc[] to learn how to configure the system.'
+      annotations = get_annotations pdf, 1
+      (expect annotations).to have_size 1
+      admin_guide_ref = annotations[0]
+      (expect admin_guide_ref[:Subtype]).to be :Link
+      (expect admin_guide_ref[:A][:S]).to eql :URI
+      (expect admin_guide_ref[:A][:URI]).to eql 'admin-guide.pdf'
+      (expect (pdf.page 1).text).to eql 'Refer to the admin-guide.pdf to learn how to configure the system.'
+    end
+
+    it 'should convert interdocument xrefs included in current document to internal references' do
       input_file = Pathname.new fixture_file 'book.adoc'
       pdf = to_pdf input_file
       p2_annotations = get_annotations pdf, 2
@@ -193,12 +250,22 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       (expect first_steps_ref[:Dest]).to eql '_first_steps'
     end
 
-    it 'should link self-referencing interdocument xref to built-in __anchor-top ref' do
+    it 'should link self-referencing interdocument xref with text to built-in __anchor-top ref' do
       pdf = to_pdf Pathname.new fixture_file 'reference-to-self.adoc'
       (expect Pathname.new output_file 'reference-to-self.pdf').to exist
       annotations = get_annotations pdf
-      (expect annotations).to have_size 1
+      (expect annotations).to have_size 2
       (expect annotations[0][:Dest]).to eql '__anchor-top'
+      (expect (pdf.page 3).text).to eql 'go to top'
+    end
+
+    it 'should link self-referencing interdocument xref without text to built-in __anchor-top ref' do
+      pdf = to_pdf Pathname.new fixture_file 'reference-to-self.adoc'
+      (expect Pathname.new output_file 'reference-to-self.pdf').to exist
+      annotations = get_annotations pdf
+      (expect annotations).to have_size 2
+      (expect annotations[1][:Dest]).to eql '__anchor-top'
+      (expect (pdf.page 4).text).to eql '[^top]'
     end
   end
 
@@ -224,7 +291,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       EOS
 
       (expect pdf.lines).to include 'Now you are ready for Part II!'
-    end if asciidoctor_1_5_7_or_better?
+    end
 
     it 'should refer to part by name when xrefstyle is basic' do
       pdf = to_pdf <<~'EOS', analyze: true
@@ -270,7 +337,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       EOS
 
       (expect pdf.lines).to include 'Now you are ready for Part II, “Advanced”!'
-    end if asciidoctor_1_5_7_or_better?
+    end
 
     it 'should refer to chapter by label and number when xrefstyle is short' do
       pdf = to_pdf <<~'EOS', analyze: true
@@ -285,7 +352,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       EOS
 
       (expect pdf.lines).to include 'Start with Chapter 1.'
-    end if asciidoctor_1_5_7_or_better?
+    end
 
     it 'should refer to chapter title and number when xrefstyle is basic' do
       pdf = to_pdf <<~'EOS', analyze: true
@@ -315,7 +382,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       EOS
 
       (expect pdf.lines).to include 'Start with Chapter 1, A.'
-    end if asciidoctor_1_5_7_or_better?
+    end
 
     it 'should use xrefstyle specified on xref macro' do
       pdf = to_pdf <<~'EOS', analyze: true
@@ -330,7 +397,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       EOS
 
       (expect pdf.lines).to include 'Start with Chapter 1, A.'
-    end if asciidoctor_1_5_7_or_better?
+    end
 
     it 'should refer to image with title by title by default' do
       pdf = to_pdf <<~'EOS', analyze: true
@@ -342,7 +409,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       EOS
 
       (expect pdf.lines[0]).to eql 'See Title of Image.'
-    end if asciidoctor_1_5_7_or_better?
+    end
 
     it 'should refer to image with title by reference signifier, number, and title when xrefstyle is full' do
       pdf = to_pdf <<~'EOS', analyze: true
@@ -356,7 +423,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       EOS
 
       (expect pdf.lines[0]).to eql 'See Figure 1, “Title of Image”.'
-    end if asciidoctor_1_5_7_or_better?
+    end
 
     it 'should refer to image with title by reference signifier and number when xrefstyle is short' do
       pdf = to_pdf <<~'EOS', analyze: true
@@ -370,7 +437,7 @@ describe 'Asciidoctor::PDF::Converter - Xref' do
       EOS
 
       (expect pdf.lines[0]).to eql 'See Figure 1.'
-    end if asciidoctor_1_5_7_or_better?
+    end
 
     it 'should show ID of reference enclosed in square brackets if reference has no xreftext' do
       pdf = to_pdf <<~'EOS'

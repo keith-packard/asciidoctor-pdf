@@ -1,0 +1,45 @@
+= Convert AsciiDoc to PDF
+
+== Run Asciidoctor PDF
+
+Assuming all the required gems install properly, verify you can run the `asciidoctor-pdf` script:
+
+ $ asciidoctor-pdf -v
+
+If you see the version of Asciidoctor PDF printed, you're ready to use Asciidoctor PDF!
+
+Let's grab an AsciiDoc document to distill and start putting Asciidoctor PDF to use.
+If you don't already have an AsciiDoc document, you can download and use the xref:attachment$basic-example.adoc[Basic Example AsciiDoc file].
+Store the file in the current directory.
+
+Let's take a look at the contents of that file.
+
+.basic-example.adoc
+[,asciidoc]
+....
+include::attachment$basic-example.adoc[]
+....
+
+It's time to convert the AsciiDoc document directly to PDF.
+
+== Convert an AsciiDoc document to a PDF
+
+IMPORTANT: You'll need the `rouge` gem installed to run this example since it uses the `source-highlighter` attribute with the value of `rouge`.
+
+Converting to PDF is as straightforward as running the `asciidoctor-pdf` script using Ruby and passing the AsciiDoc document as the first argument:
+
+ $ asciidoctor-pdf basic-example.adoc
+
+This command is a shorter way of running `asciidoctor` with the PDF converter and backend enabled:
+
+ $ asciidoctor -r asciidoctor-pdf -b pdf basic-example.adoc
+
+The `asciidoctor-pdf` command saves you from having to remember these low-level options.
+That's why we provide it.
+
+When the script completes, you should see the file [.path]_basic-example.pdf_ in the current directory.
+Asciidoctor creates the output file in the same directory as the input file by default.
+Open the [.path]_basic-example.pdf_ file with a PDF viewer to see the result.
+
+.Example PDF document rendered in a PDF viewer
+image::basic-example-pdf-screenshot.png[Screenshot of PDF document,960,540,pdfwidth=100%]

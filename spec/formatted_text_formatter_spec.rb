@@ -11,6 +11,31 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect output[0][:styles]).to eql [:bold].to_set
     end
 
+    it 'should ignore unsupported style property' do
+      input = %(<span style="text-transform: uppercase">hot</span>)
+      output = subject.format input
+      (expect output).to have_size 1
+      (expect output[0][:text]).to eql 'hot'
+    end
+
+    it 'should ignore font color if not a valid hex value' do
+      input = %(<span style="color: red">hot</span>)
+      output = subject.format input
+      (expect output).to have_size 1
+      (expect output[0][:text]).to eql 'hot'
+      (expect output[0][:color]).to be_nil
+    end
+
+    it 'should allow font color to be set on phrase using hex value' do
+      ['#F00', '#FF0000'].each do |color|
+        input = %(<span style="color: #{color}">hot</span>)
+        output = subject.format input
+        (expect output).to have_size 1
+        (expect output[0][:text]).to eql 'hot'
+        (expect output[0][:color]).to eql 'FF0000'
+      end
+    end
+
     it 'should allow font color to be set on nested phrase' do
       input = '<span style="color: #FF0000">hot <span style="color: #0000FF">cold</span> hot</span>'
       output = subject.format input
@@ -19,21 +44,124 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect output[1][:color]).to eql '0000FF'
     end
 
-    it 'should warn if text contains invalid markup' do
+    it 'should ignore background color if not a valid hex value' do
+      input = %(<span style="background-color: yellow">highlight</span>)
+      output = subject.format input
+      (expect output).to have_size 1
+      (expect output[0][:text]).to eql 'highlight'
+      (expect output[0][:background_color]).to be_nil
+    end
+
+    it 'should allow background color to be set on phrase using hex value' do
+      ['#FF0', '#FFFF00'].each do |color|
+        input = %(<span style="background-color: #{color}">highlight</span>)
+        output = subject.format input
+        (expect output).to have_size 1
+        (expect output[0][:text]).to eql 'highlight'
+        (expect output[0][:background_color]).to eql 'FFFF00'
+      end
+    end
+
+    it 'should only register callback to apply background color once when background color specified on both style and role' do
+      pdf_theme = build_pdf_theme role_hl_background_color: 'FFFF00'
+      input = %(<span class="hl" style="background-color: #EEEEEE">highlight</span>)
+      output = (subject.class.new theme: pdf_theme).format input
+      (expect output).to have_size 1
+      (expect output[0][:text]).to eql 'highlight'
+      (expect output[0][:background_color]).to eql 'FFFF00'
+      (expect output[0][:callback]).to have_size 1
+    end
+
+    it 'should only register callback to apply background color once when background color specified on both element and role' do
+      pdf_theme = build_pdf_theme codespan_background_color: 'CCCCCC', role_hl_background_color: 'FFFF00'
+      input = %(<code class="hl">code</span>)
+      output = (subject.class.new theme: pdf_theme).format input
+      (expect output).to have_size 1
+      (expect output[0][:text]).to eql 'code'
+      (expect output[0][:background_color]).to eql 'FFFF00'
+      (expect output[0][:callback]).to have_size 1
+    end
+
+    it 'should allow font weight to be set on nested phrase' do
+      input = '<span style="font-weight: bold">new</span> release'
+      output = subject.format input
+      (expect output).to have_size 2
+      (expect output[0][:text]).to eql 'new'
+      (expect output[0][:styles].to_a).to eql [:bold]
+    end
+
+    it 'should ignore unknown font weight on phrase' do
+      input = '<span style="font-weight: lighter">new</span> release'
+      output = subject.format input
+      (expect output).to have_size 2
+      (expect output[0][:text]).to eql 'new'
+      (expect output[0][:styles]).to be_nil
+    end
+
+    it 'should allow font style to be set on nested phrase' do
+      input = 'This is <span style="font-style: italic">so</span> easy'
+      output = subject.format input
+      (expect output).to have_size 3
+      (expect output[1][:text]).to eql 'so'
+      (expect output[1][:styles].to_a).to eql [:italic]
+    end
+
+    it 'should ignore unknown font style on phrase' do
+      input = 'This is <span style="font-style: oblique">so</span> easy'
+      output = subject.format input
+      (expect output).to have_size 3
+      (expect output[1][:text]).to eql 'so'
+      (expect output[1][:styles]).to be_nil
+    end
+
+    it 'should warn if text contains unrecognized tag' do
+      input = 'before <foo>bar</foo> after'
       (expect do
-        input = 'before <foo>bar</foo> after'
         output = subject.format input
         (expect output).to have_size 1
         (expect output[0][:text]).to eql input
-      end).to log_message severity: :ERROR, message: /^failed to parse formatted text:/
+      end).to log_message severity: :ERROR, message: /^failed to parse formatted text: #{Regexp.escape input} \(reason: Expected one of .* after < at byte 9\)/
     end
 
-    it 'should allow span tag to control width and text alignment' do
+    it 'should warn if text contains unrecognized entity' do
+      input = 'a &daggar; in the back'
+      (expect do
+        output = subject.format input
+        (expect output).to have_size 1
+        (expect output[0][:text]).to eql input
+      end).to log_message severity: :ERROR, message: /^failed to parse formatted text: #{Regexp.escape input} \(reason: Expected one of .* after & at byte 4\)/
+    end
+
+    it 'should allow span tag to control width' do
+      output = subject.format '<span style="width: 1in">hi</span>'
+      (expect output).to have_size 1
+      (expect output[0][:text]).to eql 'hi'
+      (expect output[0][:width]).to eql '1in'
+      (expect output[0][:align]).to be_nil
+    end
+
+    it 'should allow span tag to align text to center within width' do
       output = subject.format '<span style="width: 1in; align: center">hi</span>'
       (expect output).to have_size 1
       (expect output[0][:text]).to eql 'hi'
       (expect output[0][:width]).to eql '1in'
       (expect output[0][:align]).to eql :center
+    end
+
+    it 'should allow span tag to align text to right within width' do
+      output = subject.format '<span style="width: 1in; align: right">hi</span>'
+      (expect output).to have_size 1
+      (expect output[0][:text]).to eql 'hi'
+      (expect output[0][:width]).to eql '1in'
+      (expect output[0][:align]).to eql :right
+    end
+
+    it 'should allow span tag to align text to left within width' do
+      output = subject.format '<span style="width: 1in; align: left">hi</span>'
+      (expect output).to have_size 1
+      (expect output[0][:text]).to eql 'hi'
+      (expect output[0][:width]).to eql '1in'
+      (expect output[0][:align]).to eql :left
     end
   end
 
@@ -55,6 +183,8 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
         '&#x27;' => ?',
         '&#xa9;' => ?\u00a9,
         '&#x1f603;' => ([0x1f603].pack 'U1'),
+        '&#xA9;' => ?\u00a9,
+        '&#x1F603;' => ([0x1f603].pack 'U1'),
       }.each do |ref, chr|
         output = subject.format ref
         (expect output).to have_size 1
@@ -82,14 +212,14 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect output[0][:link]).to eql 'https://cast.you?v=999999&list=abcde&index=1'
     end
 
-    it 'should decode hexidecimal character references in link href' do
+    it 'should decode hexadecimal character references in link href' do
       output = subject.format '<a href="https://cast.you?v=999999&#x26;list=abcde&#x26;index=1">My Playlist</a>'
       (expect output).to have_size 1
       (expect output[0][:link]).to eql 'https://cast.you?v=999999&list=abcde&index=1'
     end
   end
 
-  # QUESTION should these go in a separate file?
+  # QUESTION: should these go in a separate file?
   context 'integration' do
     it 'should format constrained strong phrase' do
       pdf = to_pdf '*strong*', analyze: true
@@ -124,6 +254,20 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect pdf.text[1].values_at :string, :font_name).to eql %w(ed NotoSerif)
     end
 
+    it 'should ignore empty formatted phrase surrounded by text' do
+      pdf = to_pdf 'before *{empty}* after', analyze: true
+      text = pdf.text
+      (expect text).to have_size 1
+      (expect text[0][:string]).to eql 'before after'
+    end
+
+    it 'should ignore empty formatted phrase at extrema of line' do
+      pdf = to_pdf '*{empty}* between *{empty}*', analyze: true
+      text = pdf.text
+      (expect text).to have_size 1
+      (expect text[0][:string]).to eql 'between'
+    end
+
     it 'should format stem equation as monospace' do
       pdf = to_pdf 'Use stem:[x^2] to square the value.', analyze: true
       equation_text = (pdf.find_text 'x^2')[0]
@@ -138,6 +282,27 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect text[0][:y]).to be < text[1][:y]
     end
 
+    it 'should compute font size for superscript phrase correctly when parent element uses em units' do
+      pdf = to_pdf '`x^2^` represents exponential growth', pdf_theme: { base_font_size: 14, codespan_font_size: '0.8em' }, analyze: true
+      expected_font_size = 14 * 0.8 * 0.583
+      superscript_text = pdf.find_unique_text '2'
+      (expect superscript_text[:font_size]).to eql expected_font_size
+    end
+
+    it 'should compute font size for superscript phrase correctly when parent element uses % units' do
+      pdf = to_pdf '`x^2^` represents exponential growth', pdf_theme: { base_font_size: 14, codespan_font_size: '90%' }, analyze: true
+      expected_font_size = 14 * 0.9 * 0.583
+      superscript_text = pdf.find_unique_text '2'
+      (expect superscript_text[:font_size]).to eql expected_font_size
+    end
+
+    it 'should compute font size for superscript phrase correctly when parent element uses no units' do
+      pdf = to_pdf '`x^2^` represents exponential growth', pdf_theme: { base_font_size: 14, codespan_font_size: '12' }, analyze: true
+      expected_font_size = (12 * 0.583).round 4
+      superscript_text = pdf.find_unique_text '2'
+      (expect superscript_text[:font_size]).to eql expected_font_size
+    end
+
     it 'should format subscript phrase' do
       pdf = to_pdf 'O~2~', analyze: true
       (expect pdf.strings).to eql %w(O 2)
@@ -146,64 +311,214 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect text[0][:y]).to be > text[1][:y]
     end
 
+    it 'should compute font size for subscript phrase correctly when parent element uses em units' do
+      pdf = to_pdf 'The formula `O~2~` is oxygen', pdf_theme: { base_font_size: 14, codespan_font_size: '0.8em' }, analyze: true
+      expected_font_size = 14 * 0.8 * 0.583
+      subscript_text = pdf.find_unique_text '2'
+      (expect subscript_text[:font_size]).to eql expected_font_size
+    end
+
+    it 'should compute font size for subscript phrase correctly when parent element uses % units' do
+      pdf = to_pdf 'The formula `O~2~` is oxygen', pdf_theme: { base_font_size: 14, codespan_font_size: '90%' }, analyze: true
+      expected_font_size = 14 * 0.9 * 0.583
+      subscript_text = pdf.find_unique_text '2'
+      (expect subscript_text[:font_size]).to eql expected_font_size
+    end
+
+    it 'should compute font size for subscript phrase correctly when parent element uses no units' do
+      pdf = to_pdf 'The formula `O~2~` is oxygen', pdf_theme: { base_font_size: 14, codespan_font_size: '12' }, analyze: true
+      expected_font_size = (12 * 0.583).round 4
+      subscript_text = pdf.find_unique_text '2'
+      (expect subscript_text[:font_size]).to eql expected_font_size
+    end
+
     it 'should add background and border to code as defined in theme', visual: true do
-      theme_overrides = {
-        literal_background_color: 'f5f5f5',
-        literal_border_color: 'dddddd',
-        literal_border_width: 0.25,
-        literal_border_offset: 2.5,
-        literal_border_radius: 3,
+      pdf_theme = {
+        codespan_background_color: 'f5f5f5',
+        codespan_border_color: 'dddddd',
+        codespan_border_width: 0.25,
+        codespan_border_offset: 2.5,
       }
-      to_file = to_pdf_file 'All your `code` belongs to us.', 'text-formatter-code.pdf', pdf_theme: theme_overrides
+      to_file = to_pdf_file 'All your `code` belongs to us.', 'text-formatter-code.pdf', pdf_theme: pdf_theme
       (expect to_file).to visually_match 'text-formatter-code.pdf'
     end
 
+    it 'should use base border color if theme does not define border color for code', visual: true do
+      pdf_theme = {
+        base_border_color: 'dddddd',
+        codespan_background_color: 'f5f5f5',
+        codespan_border_width: 0.25,
+        codespan_border_offset: 2.5,
+      }
+      to_file = to_pdf_file 'All your `code` belongs to us.', 'text-formatter-code.pdf', pdf_theme: pdf_theme
+      (expect to_file).to visually_match 'text-formatter-code.pdf'
+    end
+
+    it 'should add border to phrase even when no background color is set', visual: true do
+      pdf_theme = {
+        codespan_font_color: '444444',
+        codespan_font_size: '0.75em',
+        codespan_border_color: 'E83E8C',
+        codespan_border_width: 0.25,
+        codespan_border_offset: 2.5,
+        codespan_border_radius: 3,
+      }
+      to_file = to_pdf_file 'Type `bundle install` to install dependencies', 'text-formatter-border-only.pdf', pdf_theme: pdf_theme
+      (expect to_file).to visually_match 'text-formatter-border-only.pdf'
+    end
+
     it 'should add background and border to button as defined in theme', visual: true do
-      theme_overrides = {
+      pdf_theme = {
         button_content: '%s',
         button_background_color: '007BFF',
-        button_border_offset: 3,
+        button_border_offset: 2.5,
         button_border_radius: 2,
+        button_border_width: 0.5,
+        button_border_color: '333333',
         button_font_color: 'ffffff',
       }
-      to_file = to_pdf_file 'Click btn:[Save] to save your work.', 'text-formatter-button.pdf', pdf_theme: theme_overrides, attribute_overrides: { 'experimental' => '' }
+      to_file = to_pdf_file 'Click btn:[Save] to save your work.', 'text-formatter-button.pdf', pdf_theme: pdf_theme, attribute_overrides: { 'experimental' => '' }
       (expect to_file).to visually_match 'text-formatter-button.pdf'
     end
 
-    it 'should add background and border to key as defined in theme', visual: true do
-      to_file = to_pdf_file 'Press kbd:[Ctrl,c] to kill the server.', 'text-formatter-key.pdf', attribute_overrides: { 'experimental' => '' }
-      (expect to_file).to visually_match 'text-formatter-key.pdf'
+    it 'should use base border color if theme does not defined border color for button', visual: true do
+      pdf_theme = {
+        base_border_color: '333333',
+        button_content: '%s',
+        button_background_color: '007BFF',
+        button_border_offset: 2.5,
+        button_border_radius: 2,
+        button_border_width: 0.5,
+        button_font_color: 'ffffff',
+      }
+      to_file = to_pdf_file 'Click btn:[Save] to save your work.', 'text-formatter-button.pdf', pdf_theme: pdf_theme, attribute_overrides: { 'experimental' => '' }
+      (expect to_file).to visually_match 'text-formatter-button.pdf'
+    end
+
+    it 'should use label as default button content', visual: true do
+      pdf_theme = {
+        button_content: nil,
+        button_background_color: '007BFF',
+        button_border_offset: 2.5,
+        button_border_radius: 2,
+        button_border_width: 0.5,
+        button_border_color: '333333',
+        button_font_color: 'ffffff',
+      }
+      to_file = to_pdf_file 'Click btn:[Save] to save your work.', 'text-formatter-button-default.pdf', pdf_theme: pdf_theme, attribute_overrides: { 'experimental' => '' }
+      (expect to_file).to visually_match 'text-formatter-button.pdf'
+    end
+
+    it 'should replace %s with button label in button content defined in theme' do
+      pdf_theme = {
+        button_content: '[%s]',
+        button_font_color: '333333',
+      }
+      pdf = to_pdf 'Click btn:[Save] to save your work.', analyze: true, pdf_theme: pdf_theme, attribute_overrides: { 'experimental' => '' }
+      (expect pdf.lines).to eql ['Click [Save] to save your work.']
+    end
+
+    it 'should add background and border to kbd as defined in theme', visual: true do
+      to_file = to_pdf_file <<~'EOS', 'text-formatter-kbd.pdf', attribute_overrides: { 'experimental' => '' }
+      Press kbd:[q] to exit.
+
+      Press kbd:[Ctrl,c] to kill the process.
+      EOS
+      (expect to_file).to visually_match 'text-formatter-kbd.pdf'
+    end
+
+    it 'should use base border color if theme does not define border color for kbd', visual: true do
+      pdf_theme = {
+        base_border_color: 'CCCCCC',
+        kbd_border_color: nil,
+      }
+
+      to_file = to_pdf_file <<~'EOS', 'text-formatter-kbd.pdf', pdf_theme: pdf_theme, attribute_overrides: { 'experimental' => '' }
+      Press kbd:[q] to exit.
+
+      Press kbd:[Ctrl,c] to kill the process.
+      EOS
+      (expect to_file).to visually_match 'text-formatter-kbd.pdf'
+    end
+
+    it 'should use + as kbd separator if not specified in theme' do
+      pdf = to_pdf <<~'EOS', analyze: true, pdf_theme: { kbd_separator: nil }, attribute_overrides: { 'experimental' => '' }
+      Press kbd:[Ctrl,c] to kill the process.
+      EOS
+      (expect pdf.lines).to eql ['Press Ctrl + c to kill the process.']
+    end
+
+    it 'should convert menu macro' do
+      pdf = to_pdf <<~'EOS', analyze: true, attribute_overrides: { 'experimental' => '' }
+      Select menu:File[Quit] to exit.
+      EOS
+      menu_texts = pdf.find_text font_name: 'NotoSerif-Bold'
+      (expect menu_texts).to have_size 3
+      (expect menu_texts[0][:string]).to eql 'File '
+      (expect menu_texts[0][:font_color]).to eql '333333'
+      (expect menu_texts[1][:string]).to eql ?\u203a
+      (expect menu_texts[1][:font_color]).to eql 'B12146'
+      (expect menu_texts[2][:string]).to eql ' Quit'
+      (expect menu_texts[2][:font_color]).to eql '333333'
+      (expect pdf.lines).to eql [%(Select File \u203a Quit to exit.)]
+    end
+
+    it 'should support menu macro with only the root level' do
+      pdf = to_pdf <<~'EOS', analyze: true, attribute_overrides: { 'experimental' => '' }
+      The menu:File[] menu is where all the useful stuff is.
+      EOS
+      menu_texts = pdf.find_text font_name: 'NotoSerif-Bold'
+      (expect menu_texts).to have_size 1
+      (expect menu_texts[0][:string]).to eql 'File'
+      (expect menu_texts[0][:font_color]).to eql '333333'
+      (expect pdf.lines).to eql ['The File menu is where all the useful stuff is.']
+    end
+
+    it 'should support menu macro with multiple levels' do
+      pdf = to_pdf <<~'EOS', analyze: true, attribute_overrides: { 'experimental' => '' }
+      Select menu:File[New,Class] to create a new Java class.
+      EOS
+      menu_texts = pdf.find_text font_name: 'NotoSerif-Bold'
+      (expect menu_texts).to have_size 5
+      (expect menu_texts[0][:string]).to eql 'File '
+      (expect menu_texts[0][:font_color]).to eql '333333'
+      (expect menu_texts[1][:string]).to eql ?\u203a
+      (expect menu_texts[1][:font_color]).to eql 'B12146'
+      (expect menu_texts[2][:string]).to eql ' New '
+      (expect menu_texts[2][:font_color]).to eql '333333'
+      (expect menu_texts[3][:string]).to eql ?\u203a
+      (expect menu_texts[3][:font_color]).to eql 'B12146'
+      (expect menu_texts[4][:string]).to eql ' Class'
+      (expect menu_texts[4][:font_color]).to eql '333333'
+      (expect pdf.lines).to eql [%(Select File \u203a New \u203a Class to create a new Java class.)]
+    end
+
+    it 'should use default caret content for menu if not specified by theme' do
+      pdf = to_pdf <<~'EOS', analyze: true, pdf_theme: { menu_caret_content: nil }, attribute_overrides: { 'experimental' => '' }
+      Select menu:File[Quit] to exit.
+      EOS
+      menu_texts = pdf.find_text font_name: 'NotoSerif-Bold'
+      (expect menu_texts).to have_size 1
+      (expect menu_texts[0][:string]).to eql %(File \u203a Quit)
+      (expect menu_texts[0][:font_color]).to eql '333333'
+      (expect pdf.lines).to eql [%(Select File \u203a Quit to exit.)]
+    end
+
+    it 'should allow theme to control font properties for menu' do
+      pdf = to_pdf <<~'EOS', analyze: true, pdf_theme: { menu_font_color: 'AA0000', menu_font_size: 10, menu_font_style: 'bold_italic', menu_caret_content: ' > ' }, attribute_overrides: { 'experimental' => '' }
+      Select menu:File[Quit] to exit.
+      EOS
+      menu_texts = pdf.find_text font_name: 'NotoSerif-BoldItalic'
+      (expect menu_texts).to have_size 1
+      (expect menu_texts[0][:string]).to eql %(File > Quit)
+      (expect menu_texts[0][:font_color]).to eql 'AA0000'
+      (expect menu_texts[0][:font_size]).to eql 10
+      (expect pdf.lines).to eql [%(Select File > Quit to exit.)]
     end
 
     it 'should add background to mark as defined in theme', visual: true do
       to_file = to_pdf_file 'normal #highlight# normal', 'text-formatter-mark.pdf'
       (expect to_file).to visually_match 'text-formatter-mark.pdf'
-    end
-
-    it 'should use glyph from fallback font if not present in primary font', visual: true do
-      to_file = to_pdf_file '*を*', 'text-formatter-fallback-font.pdf', attribute_overrides: { 'pdf-theme' => 'default-with-fallback-font' }
-      (expect to_file).to visually_match 'text-formatter-fallback-font.pdf'
-    end
-
-    it 'should look for glyph in font for the specified font style when fallback font is enabled' do
-      pdf_theme = {
-        extends: 'default',
-        font_catalog: {
-          'Noto Serif' => {
-            'normal' => 'notoemoji-subset.ttf',
-            'bold' => 'notoserif-bold-subset.ttf',
-          },
-          'M+ 1p Fallback' => {
-            'normal' => 'mplus1p-regular-fallback.ttf',
-            'bold' => 'mplus1p-regular-fallback.ttf',
-          },
-        },
-        font_fallbacks: ['M+ 1p Fallback'],
-      }
-      pdf = to_pdf %(**\u03a9**), analyze: true, pdf_theme: pdf_theme
-      text = (pdf.find_text ?\u03a9)[0]
-      (expect text).not_to be_nil
-      (expect text[:font_name]).to eql 'NotoSerif-Bold'
     end
 
     it 'should be able to reference section title containing icon' do
@@ -227,15 +542,13 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
         ['uppercase', 'here we go again', 'HERE WE GO AGAIN'],
         ['lowercase', 'Here We Go Again', 'here we go again'],
         ['capitalize', 'Here we go again', 'Here We Go Again'],
+        ['smallcaps', 'Here We Go Again', 'Hᴇʀᴇ Wᴇ Go Aɢᴀɪɴ'],
       ].each do |(transform, before, after)|
-        pdf = to_pdf <<~EOS, pdf_theme: { heading_text_transform: transform }, analyze: true
-        == #{before}
-        EOS
-
+        pdf = to_pdf %(== #{before}), pdf_theme: { heading_text_transform: transform }, analyze: true
         lines = pdf.lines
         (expect lines).to have_size 1
         (expect lines[0]).to eql after
-        formatted_word = (pdf.find_text %r/again/i)[0]
+        formatted_word = (pdf.find_text %r/again|aɢᴀɪɴ/i)[0]
         (expect formatted_word[:font_name]).to eql 'NotoSerif-Bold'
       end
     end
@@ -245,17 +558,23 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
         ['uppercase', 'here we go *again*', 'HERE WE GO AGAIN'],
         ['lowercase', 'Here We Go *Again*', 'here we go again'],
         ['capitalize', 'Here we go *again*', 'Here We Go Again'],
+        ['smallcaps', 'Here we go *again*', 'Hᴇʀᴇ ᴡᴇ ɢo ᴀɢᴀɪɴ'],
       ].each do |(transform, before, after)|
-        pdf = to_pdf <<~EOS, pdf_theme: { heading_text_transform: transform }, analyze: true
-        == #{before}
-        EOS
-
+        pdf = to_pdf %(== #{before}), pdf_theme: { heading_text_transform: transform }, analyze: true
         lines = pdf.lines
         (expect lines).to have_size 1
         (expect lines[0]).to eql after
-        formatted_word = (pdf.find_text %r/again/i)[0]
+        formatted_word = (pdf.find_text %r/again|ᴀɢᴀɪɴ/i)[0]
         (expect formatted_word[:font_name]).to eql 'NotoSerif-Bold'
       end
+    end
+
+    it 'should apply capitalization to contiguous characters' do
+      pdf = to_pdf %(== foo-bar baz), pdf_theme: { heading_text_transform: 'capitalize' }, analyze: true
+      lines = pdf.lines
+      (expect lines).to have_size 1
+      (expect lines[0]).to eql 'Foo-bar Baz'
+      (expect pdf.text[0][:font_name]).to eql 'NotoSerif-Bold'
     end
 
     it 'should not lowercase tags when applying lowercase text transform' do
@@ -269,8 +588,35 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
     end
 
     it 'should apply width and alignment specified by span tag', visual: true do
-      to_file = to_pdf_file '|+++<span style="width: 1in; align: center; background-color: #ffff00">hi</span>+++|', 'text-formatter-width-text-alignment.pdf'
-      (expect to_file).to visually_match 'text-formatter-width-text-alignment.pdf'
+      %w(left center right).each do |align|
+        to_file = to_pdf_file <<~EOS, %(text-formatter-align-#{align}-within-width.pdf)
+        |+++<span style="width: 1in; align: #{align}; background-color: #ffff00">hi</span>+++|
+        EOS
+        (expect to_file).to visually_match %(text-formatter-align-#{align}-within-width.pdf)
+      end
+    end
+
+    it 'should preserve word spacing in multi-word phrase that has a border offset', visual: true do
+      pdf_theme = { role_wild_background_color: 'CCCCCC', role_wild_border_offset: 1.5 }
+      to_file = to_pdf_file <<~EOS, 'text-formatter-marked-phrase-word-spacing.pdf', pdf_theme: pdf_theme
+      To tame the [.wild]#extremely wild and dangerous wolpertingers#, we needed to build a *charm*.
+      But ultimate victory could only be won if we divined the true name of the warlock.
+      EOS
+      (expect to_file).to visually_match 'text-formatter-marked-phrase-word-spacing.pdf'
+    end
+
+    it 'should not warn if text contains invalid markup in scratch document' do
+      # NOTE: this assertion will fail if the message is logged multiple times
+      (expect do
+        pdf = to_pdf <<~'EOS', analyze: true
+        [%unbreakable]
+        --
+        before +++<foo>bar</foo>+++ after
+        --
+        EOS
+
+        (expect pdf.lines).to eql ['before <foo>bar</foo> after']
+      end).to log_message severity: :ERROR, message: /^failed to parse formatted text:/
     end
   end
 
@@ -313,8 +659,8 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       pdf_theme = {
         'role_line-through_text_decoration': 'none',
         'role_line-through_font_color': 'AA0000',
-        'role_underline_text_decoration': 'none',
-        'role_underline_font_color': '0000AA',
+        role_underline_text_decoration: 'none',
+        role_underline_font_color: '0000AA',
       }
       input = '[.underline]#underline# and [.line-through]#line-through#'
       pdf = to_pdf input, pdf_theme: pdf_theme, analyze: :line
@@ -330,8 +676,8 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       pdf_theme = {
         'role_line-through_text_decoration_color': 'AA0000',
         'role_line-through_text_decoration_width': 2,
-        'role_underline_text_decoration_color': '0000AA',
-        'role_underline_text_decoration_width': 0.5,
+        role_underline_text_decoration_color: '0000AA',
+        role_underline_text_decoration_width: 0.5,
       }
       input = <<~'EOS'
       [.underline]#underline#
@@ -360,16 +706,26 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect lines[0][:width]).to eql 0.5
     end
 
-    it 'should support size roles (big and small) in default theme' do
-      pdf_theme = build_pdf_theme
-      (expect pdf_theme.role_big_font_size).to be 13
-      (expect pdf_theme.role_small_font_size).to be 9
-      pdf = to_pdf '[.big]#big# and [.small]#small#', pdf_theme: (pdf_theme = build_pdf_theme), analyze: true
+    it 'should support size roles (big and small) in base theme' do
+      pdf = to_pdf '[.big]#big# and [.small]#small#', pdf_theme: (pdf_theme = build_pdf_theme({}, 'base')), analyze: true
+      (expect pdf_theme.role_big_font_size).to eql '1.2em'
+      (expect pdf_theme.role_small_font_size).to eql '0.8em'
       text = pdf.text
       (expect text).to have_size 3
-      (expect text[0][:font_size].to_f.round 2).to eql pdf_theme.base_font_size_large.to_f
+      (expect text[0][:font_size]).to eql ((pdf_theme.base_font_size * 1.2).round 2)
       (expect text[1][:font_size]).to eql pdf_theme.base_font_size
-      (expect text[2][:font_size].to_f.round 2).to eql pdf_theme.base_font_size_small.to_f
+      (expect text[2][:font_size]).to eql ((pdf_theme.base_font_size * 0.8).round 2)
+    end
+
+    it 'should support size roles (big and small) in default theme' do
+      pdf = to_pdf '[.big]#big# and [.small]#small#', pdf_theme: (pdf_theme = build_pdf_theme), analyze: true
+      (expect pdf_theme.role_big_font_size).to eql '1.2em'
+      (expect pdf_theme.role_small_font_size).to eql '0.8em'
+      text = pdf.text
+      (expect text).to have_size 3
+      (expect text[0][:font_size]).to eql ((pdf_theme.base_font_size * 1.2).round 2)
+      (expect text[1][:font_size]).to eql pdf_theme.base_font_size
+      (expect text[2][:font_size]).to eql ((pdf_theme.base_font_size * 0.8).round 2)
     end
 
     it 'should allow theme to override formatting for font size roles' do
@@ -389,13 +745,40 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
     end
 
     it 'should support font size roles (big and small) using fallback values if not specified in theme' do
-      pdf_theme = build_pdf_theme({ base_font_size: 12 }, (fixture_file 'extends-nil-theme.yml'))
+      pdf_theme = {
+        extends: (fixture_file 'bare-theme.yml'),
+        base_font_size: 12,
+      }
       pdf = to_pdf '[.big]#big# and [.small]#small#', pdf_theme: pdf_theme, analyze: true
       text = pdf.text
       (expect text).to have_size 3
       (expect text[0][:font_size].to_f.round 2).to eql 14.0
       (expect text[1][:font_size]).to be 12
       (expect text[2][:font_size].to_f.round 2).to eql 10.0
+    end
+
+    it 'should base font size roles on large and small theme keys if not specified in theme' do
+      pdf_theme = {
+        extends: (fixture_file 'bare-theme.yml'),
+        base_font_size: 12,
+        base_font_size_large: 18,
+        base_font_size_small: 9,
+      }
+      pdf = to_pdf '[.big]#big# and [.small]#small#', pdf_theme: pdf_theme, analyze: true
+      text = pdf.text
+      (expect text).to have_size 3
+      (expect text[0][:font_size].to_f.round 2).to eql 18.0
+      (expect text[1][:font_size]).to be 12
+      (expect text[2][:font_size].to_f.round 2).to eql 9.0
+    end
+
+    it 'should support built-in pre-wrap role on phrase' do
+      pdf = to_pdf <<~'EOS', analyze: true
+      [.pre-wrap]`0 1  2   3     5`
+      EOS
+
+      shout_text = pdf.text[0]
+      (expect shout_text[:string]).to eql '0 1  2   3     5'
     end
 
     it 'should allow theme to control formatting applied to phrase by role' do
@@ -455,12 +838,12 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
 
     it 'should allow theme to set text decoration color and width for custom role' do
       pdf_theme = {
-        'role_delete_text_decoration': 'line-through',
-        'role_delete_text_decoration_color': 'AA0000',
-        'role_delete_text_decoration_width': 2,
-        'role_important_text_decoration': 'underline',
-        'role_important_text_decoration_color': '0000AA',
-        'role_important_text_decoration_width': 0.5,
+        role_delete_text_decoration: 'line-through',
+        role_delete_text_decoration_color: 'AA0000',
+        role_delete_text_decoration_width: 2,
+        role_important_text_decoration: 'underline',
+        role_important_text_decoration_color: '0000AA',
+        role_important_text_decoration_width: 0.5,
       }
       input = <<~'EOS'
       [.important]#important#
@@ -474,6 +857,21 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect lines[0][:width]).to eql 0.5
       (expect lines[1][:color]).to eql 'AA0000'
       (expect lines[1][:width]).to be 2
+    end
+
+    it 'should allow custom role to specify font style and text decoration' do
+      pdf_theme = { role_heavy_text_decoration: 'underline', role_heavy_font_style: 'bold' }
+      input = '[.heavy]#kick#, bass, and trance'
+      pdf = to_pdf input, pdf_theme: pdf_theme, analyze: :line
+      lines = pdf.lines
+      (expect lines).to have_size 1
+      underline = lines[0]
+      pdf = to_pdf input, pdf_theme: pdf_theme, analyze: true
+      text = pdf.text
+      (expect text).to have_size 2
+      underlined_text = text[0]
+      (expect underlined_text[:font_name]).to eql 'NotoSerif-Bold'
+      (expect underline[:from][:x]).to eql underlined_text[:x]
     end
 
     it 'should allow custom role to apply text transform' do
@@ -492,10 +890,62 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect lines[0]).to eql 'whisper SHOUT Here Me Roar'
     end
 
+    it 'should allow custom role to apply text transform when it is not the only role on the phrase' do
+      pdf_theme = {
+        role_red_font_color: 'FF0000',
+        role_upper_text_transform: 'uppercase',
+      }
+
+      pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, analyze: true
+      [.upper.red]#shout#
+      EOS
+
+      shout_text = pdf.text[0]
+      (expect shout_text[:font_color]).to eql 'FF0000'
+      (expect shout_text[:string]).to eql 'SHOUT'
+    end
+
+    it 'should apply text transform to value of attribute reference' do
+      pdf = to_pdf <<~'EOS', pdf_theme: { role_upper_text_transform: 'uppercase' }, analyze: true
+      :brandname: acme
+
+      [.upper]#{brandname}#
+      EOS
+
+      lines = pdf.lines
+      (expect lines).to have_size 1
+      (expect lines[0]).to eql 'ACME'
+    end
+
+    it 'should apply text transform to enclosed formatted text' do
+      pdf = to_pdf <<~'EOS', pdf_theme: { role_upper_text_transform: 'uppercase' }, analyze: true
+      [.upper]#_please_ transform *bob &amp; carl* +
+      to `uppercase`#
+      EOS
+
+      lines = pdf.lines
+      (expect lines).to have_size 2
+      (expect lines).to eql ['PLEASE TRANSFORM BOB & CARL', 'TO UPPERCASE']
+      text = pdf.text
+      (expect text).to have_size 5
+      (expect text[0][:font_name]).to eql 'NotoSerif-Italic'
+      (expect text[1][:font_name]).to eql 'NotoSerif'
+      (expect text[2][:font_name]).to eql 'NotoSerif-Bold'
+      (expect text[3][:font_name]).to eql 'NotoSerif'
+      (expect text[4][:font_name]).to eql 'mplus1mn-regular'
+    end
+
+    it 'should apply smallcaps text transform to phrase' do
+      pdf = to_pdf <<~'EOS', pdf_theme: { role_sc_text_transform: 'smallcaps' }, analyze: true
+      HTML stands for [.sc]#HyperText Markup Language#
+      EOS
+      (expect pdf.lines).to eql ['HTML stands for HʏᴘᴇʀTᴇxᴛ Mᴀʀᴋᴜᴘ Lᴀɴɢᴜᴀɢᴇ']
+    end
+
     it 'should allow custom role to specify relative font size' do
       pdf_theme = {
         heading_h2_font_size: 24,
-        literal_font_size: '0.75em',
+        codespan_font_size: '0.75em',
         role_mono_font_size: '0.875em',
       }
       pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, analyze: true
@@ -510,14 +960,22 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect max_text[:font_size].to_f).to eql 21.0
     end
 
+    it 'should add background to link as defined in theme', visual: true do
+      pdf_theme = {
+        link_background_color: 'EFEFEF',
+        link_border_offset: 1,
+      }
+      to_file = to_pdf_file 'Check out https://asciidoctor.org[Asciidoctor].', 'text-formatter-link-background.pdf', pdf_theme: pdf_theme
+      (expect to_file).to visually_match 'text-formatter-link-background.pdf'
+    end
+
     it 'should allow custom role to override styles of link' do
       pdf_theme = {
         heading_font_color: '000000',
         link_font_color: '0000AA',
         role_hlink_font_color: '00AA00',
       }
-      attribute_overrides = asciidoctor_1_5_7_or_better? ? {} : { 'linkattrs' => '' }
-      pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, attribute_overrides: attribute_overrides, analyze: true
+      pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, analyze: true
       == https://asciidoctor.org[Asciidoctor,role=hlink]
       EOS
 
@@ -546,6 +1004,26 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
 
       glorious_text = (pdf.find_text 'quick')[0]
       (expect glorious_text[:font_name]).to eql 'NotoSerif-BoldItalic'
+    end
+
+    it 'should allow role to reset font style to normal' do
+      pdf_theme = {
+        role_normal_font_style: 'normal',
+      }
+      pdf = to_pdf '*Make it [.normal]#plain#.*', pdf_theme: pdf_theme, analyze: true
+
+      glorious_text = (pdf.find_text 'plain')[0]
+      (expect glorious_text[:font_name]).to eql 'NotoSerif'
+    end
+
+    it 'should allow role to set font style to italic inside bold text' do
+      pdf_theme = {
+        role_term_font_style: 'normal_italic',
+      }
+      pdf = to_pdf '*We call that [.term]#intersectional#.*', pdf_theme: pdf_theme, analyze: true
+
+      glorious_text = (pdf.find_text 'intersectional')[0]
+      (expect glorious_text[:font_name]).to eql 'NotoSerif-Italic'
     end
 
     it 'should support theming multiple roles on a single phrase' do
@@ -585,7 +1063,7 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect formatted_text[:font_name]).to eql 'NotoSerif'
     end
 
-    it 'should allow theme to override background and border for custom role', visual: true do
+    it 'should allow theme to set background and border for custom role', visual: true do
       pdf_theme = {
         role_variable_font_family: 'Courier',
         role_variable_font_size: '1.15em',
@@ -598,6 +1076,51 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       }
       to_file = to_pdf_file 'reads value from the [.variable]#counter# variable', 'text-formatter-inline-role-bg.pdf', pdf_theme: pdf_theme
       (expect to_file).to visually_match 'text-formatter-inline-role-bg.pdf'
+    end
+
+    it 'should draw standard rectangle around text if border radius of custom role is 0' do
+      pdf_theme = {
+        role_box_border_radius: 0,
+        role_box_border_color: '333333',
+        role_box_border_width: 0.5,
+      }
+      rects = (to_pdf '[.box]#text in a box# needs more work', pdf_theme: pdf_theme, analyze: :rect).rects
+      (expect rects).to have_size 1
+      (expect rects[0][:stroke_color]).to eql '333333'
+      (expect rects[0][:stroke_width]).to eql 0.5
+    end
+
+    it 'should use base border color for inline role if border width is set and border color is not set' do
+      pdf_theme = {
+        base_border_color: '0000FF',
+        role_box_border_width: 0.5,
+      }
+      rects = (to_pdf '[.box]#text in a box# needs more work', pdf_theme: pdf_theme, analyze: :rect).rects
+      (expect rects).to have_size 1
+      (expect rects[0][:stroke_color]).to eql '0000FF'
+    end
+
+    it 'should allow theme to set only border for custom role', visual: true do
+      pdf_theme = {
+        role_cmd_font_family: 'Courier',
+        role_cmd_font_size: '1.15em',
+        role_cmd_border_color: '222222',
+        role_cmd_border_width: 0.5,
+      }
+      to_file = to_pdf_file 'use the [.cmd]#man# command to get help', 'text-formatter-inline-role-border.pdf', pdf_theme: pdf_theme
+      (expect to_file).to visually_match 'text-formatter-inline-role-border.pdf'
+    end
+
+    it 'should not crash if role defines background color and border width, but not border color' do
+      pdf_theme = {
+        base_border_color: nil,
+        role_shade_background_color: 'CCCCCC',
+        role_shade_border_width: 1,
+      }
+      input = '1 [.shade]#cup# of beans'
+      rects = (to_pdf input, pdf_theme: pdf_theme, analyze: :rect).rects
+      (expect rects).to have_size 1
+      (expect rects[0][:fill_color]).to eql 'CCCCCC'
     end
 
     it 'should support role that sets font color in section title and toc' do
@@ -636,6 +1159,79 @@ describe Asciidoctor::PDF::FormattedText::Formatter do
       (expect default_section_text[0][:font_color]).to eql '333333'
       (expect default_section_text[1][:page_number]).to be 4
       (expect default_section_text[1][:font_color]).to eql '333333'
+    end
+  end
+
+  describe 'typographic quotes' do
+    it 'should use double curved quotes by default' do
+      pdf = to_pdf '"`Double quoted`"', analyze: true
+      (expect pdf.text[0][:string]).to eql %(\u201cDouble quoted\u201d)
+    end
+
+    it 'should use single curved quotes by default' do
+      pdf = to_pdf '\'`Single quoted`\'', analyze: true
+      (expect pdf.text[0][:string]).to eql %(\u2018Single quoted\u2019)
+    end
+
+    it 'should use user-defined double quotation marks if specified' do
+      pdf_theme = { quotes: %w(&#x00ab; &#x00bb;) }
+      pdf = to_pdf '"`Double quoted`"', pdf_theme: pdf_theme, analyze: true
+      (expect pdf.text[0][:string]).to eql %(\u00abDouble quoted\u00bb)
+    end
+
+    it 'should use user-defined single quotation marks if specified' do
+      pdf_theme = { quotes: %w(&#x00ab; &#x00bb; &#x2039; &#x203a;) }
+      pdf = to_pdf '\'`Single quoted`\'', pdf_theme: pdf_theme, analyze: true
+      (expect pdf.text[0][:string]).to eql %(\u2039Single quoted\u203a)
+    end
+
+    it 'should use single curved quotes by default if theme only specifies double quotation marks' do
+      pdf_theme = { quotes: %w(&#x00ab; &#x00bb;) }
+      pdf = to_pdf '\'`Single quoted`\'', pdf_theme: pdf_theme, analyze: true
+      (expect pdf.text[0][:string]).to eql %(\u2018Single quoted\u2019)
+    end
+
+    it 'should not use the closing single quotation mark as apostrophe' do
+      pdf_theme = { quotes: %w(&#x00ab; &#x00bb; &#x2039; &#x203a;) }
+      pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, analyze: true
+      Apostrophes`' substitution shouldn`'t match '`single quoted`'
+      EOS
+      (expect pdf.text[0][:string]).to eql %(Apostrophes\u2019 substitution shouldn\u2019t match \u2039single quoted\u203a)
+    end
+
+    it 'should use user-defined quotation marks in the TOC' do
+      pdf_theme = { quotes: %w(&#x00ab; &#x00bb; &#x2039; &#x203a;) }
+      pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, analyze: true
+      = Document '`Title`'
+      :doctype: book
+      :toc:
+
+      == "`Double Quoted`"
+
+      == '`Single Quoted`'
+
+      EOS
+      (expect (pdf.find_text %(Document \u2039Title\u203a))).to have_size 1
+      (expect (pdf.find_text %(\u00abDouble Quoted\u00bb))).to have_size 2
+      (expect (pdf.find_text %(\u2039Single Quoted\u203a))).to have_size 2
+    end
+
+    it 'should keep closing double quote attached to trailing ellipsis' do
+      pdf = to_pdf <<~EOS, analyze: true
+      #{(['filler'] * 15).join ' '} ||||| "`and then...`"
+      EOS
+      lines = pdf.lines
+      (expect lines).to have_size 2
+      (expect lines[1]).to start_with 'then'
+    end
+
+    it 'should keep closing single quote attached to trailing ellipsis' do
+      pdf = to_pdf <<~EOS, analyze: true
+      #{(['filler'] * 15).join ' '} .|||||. '`and then...`'
+      EOS
+      lines = pdf.lines
+      (expect lines).to have_size 2
+      (expect lines[1]).to start_with 'then'
     end
   end
 end

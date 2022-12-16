@@ -1,7 +1,22 @@
 # frozen_string_literal: true
 
 Prawn::Text::Formatted::Box.prepend (Module.new do
-  include ::Asciidoctor::Logging
+  include Asciidoctor::Logging
+
+  def initialize formatted_text, options = {}
+    if (color = options[:color]) && !formatted_text.empty?
+      formatted_text = formatted_text.map {|fragment| fragment[:color] ? fragment : (fragment.merge color: color) }
+    end
+    super
+    formatted_text[0][:normalize_line_height] = true if options[:normalize_line_height] && !formatted_text.empty?
+    options[:extensions]&.each {|extension| extend extension }
+    extend Prawn::Text::Formatted::IndentedParagraphWrap if (@indent_paragraphs = options[:indent_paragraphs])
+    if (bottom_gutter = options[:bottom_gutter]) && bottom_gutter > 0
+      @bottom_gutter = bottom_gutter
+      extend Prawn::Text::Formatted::ProtectBottomGutter
+    end
+    @force_justify = options[:force_justify]
+  end
 
   def draw_fragment_overlay_styles fragment
     if (underline = (styles = fragment.styles).include? :underline) || (styles.include? :strikethrough)
@@ -17,6 +32,7 @@ Prawn::Text::Formatted::Box.prepend (Module.new do
     end
   end
 
+  # TODO: remove when upgrading to prawn-2.5.0
   def analyze_glyphs_for_fallback_font_support fragment_hash
     fragment_font = fragment_hash[:font] || (original_font = @document.font.family)
     if (fragment_font_styles = fragment_hash[:styles])
@@ -38,6 +54,7 @@ Prawn::Text::Formatted::Box.prepend (Module.new do
     form_fragments_from_like_font_glyph_pairs font_glyph_pairs, fragment_hash
   end
 
+  # TODO: remove once Prawn 2.5 is released
   def find_font_for_this_glyph char, current_font, current_font_opts = {}, fallback_fonts_to_check = [], original_font = current_font
     (doc = @document).font current_font, current_font_opts
     if doc.font.glyph_present? char
@@ -49,7 +66,7 @@ Prawn::Text::Formatted::Box.prepend (Module.new do
             (doc.instance_variable_get :@missing_chars) : (doc.instance_variable_set :@missing_chars, {})
         previous_fonts_checked = (missing_chars[char] ||= [])
         if previous_fonts_checked.empty? && !(previous_fonts_checked.include? fonts_checked)
-          logger.warn %(Could not locate the character `#{char}' in the following fonts: #{fonts_checked.join ', '})
+          logger.warn %(Could not locate the character `#{char}' (#{char.unpack('U*').map {|it| "\\u#{(it.to_s 16).rjust 4, '0'}" }.join}) in the following fonts: #{fonts_checked.join ', '})
           previous_fonts_checked << fonts_checked
         end
       end
@@ -59,29 +76,37 @@ Prawn::Text::Formatted::Box.prepend (Module.new do
     end
   end
 
+  # Override method to force text justification when :force_justify option is set (typically for rendering a single line)
+  def word_spacing_for_this_line
+    if @align == :justify && (@force_justify || (@line_wrap.space_count > 0 && !@line_wrap.paragraph_finished?))
+      (available_width - @line_wrap.width) / @line_wrap.space_count
+    else
+      0
+    end
+  end
+
+  # Override method in super class to provide support for a tuple consisting of alignment and offset
   def process_vertical_alignment text
-    return super if ::Symbol === (valign = @vertical_align)
+    return super if Symbol === (valign = @vertical_align)
 
     return if defined? @vertical_alignment_processed
     @vertical_alignment_processed = true
 
     valign, offset = valign
 
-    if valign == :top
-      @at[1] -= offset
-      return
-    end
-
-    wrap text
-    h = height
-
     case valign
     when :center
-      @at[1] -= (@height - h + @descender) * 0.5 + offset
+      wrap text
+      @at[1] -= (@height - (rendered_height = height) + @descender) * 0.5 + offset
+      @height = rendered_height
     when :bottom
-      @at[1] -= (@height - h) + offset
+      wrap text
+      @at[1] -= (@height - (rendered_height = height)) + offset
+      @height = rendered_height
+    else # :top
+      @at[1] -= offset
     end
 
-    @height = h
+    nil
   end
 end)
