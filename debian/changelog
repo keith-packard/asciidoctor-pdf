@@ -1,4 +1,4 @@
-ruby-asciidoctor-pdf (2.3.4-1) UNRELEASED; urgency=medium
+ruby-asciidoctor-pdf (2.3.4-1) unstable; urgency=medium
 
   * New upstream release (Closes: #1023765).
   * d/control: update ruby-prawn version constraint.
