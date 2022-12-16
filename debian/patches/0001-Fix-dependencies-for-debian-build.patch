@@ -5,10 +5,6 @@ Subject: Fix dependencies for debian build.
 Removed prawn/templates, which eliminates the ability to use .pdf
 files as images.
 
-Switch concurrent-ruby dependency to ~> 1.1. concurrent-ruby is using
-semantic versioning, which means any minor version above 1.1 "should"
-be compatible.
-
 Update gemspec dependencies to match debian packages
 
 I've tested with these versions and the test suites results match the
@@ -16,40 +12,36 @@ current debian package, although there are spurious errors, e.g. 12 !=
 12.0.
 
 Signed-off-by: Keith Packard <keithp@keithp.com>
----
- asciidoctor-pdf.gemspec | 6 +++---
- lib/asciidoctor/pdf.rb  | 2 +-
- 2 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/asciidoctor-pdf.gemspec b/asciidoctor-pdf.gemspec
-index 2afa2a1..0579aeb 100644
+Last-Updated: 2022-12-16
+Reviewed-By: Lucas Kanashiro <kanashiro@debian.org>
+Forwarded: not-needed
+
 --- a/asciidoctor-pdf.gemspec
 +++ b/asciidoctor-pdf.gemspec
-@@ -33,11 +33,11 @@ Gem::Specification.new do |s|
-   s.require_paths = ['lib']
-   #s.test_files = files.grep %r/^(?:test|spec|feature)\/.*$/
+@@ -35,11 +35,11 @@
  
--  s.add_runtime_dependency 'asciidoctor', '~> 2.0'
--  s.add_runtime_dependency 'prawn', '~> 2.4.0'
-+  s.add_runtime_dependency 'asciidoctor', '>= 1.5.3', '< 3.0.0'
-+  s.add_runtime_dependency 'prawn', '>= 2.3.0'
-   # NOTE must use prawn-table from head (defined in Gemfile) for full functionality
+   s.add_runtime_dependency 'asciidoctor', '~> 2.0'
+   s.add_runtime_dependency 'prawn', '~> 2.4.0'
+-  s.add_runtime_dependency 'matrix', '~> 0.4' # required until prawn >= 2.5.0 is released
++  # s.add_runtime_dependency 'matrix', '~> 0.4' # required until prawn >= 2.5.0 is released
    s.add_runtime_dependency 'prawn-table', '~> 0.2.0'
 -  s.add_runtime_dependency 'prawn-templates', '~> 0.1.0'
 +  # s.add_runtime_dependency 'prawn-templates', '~> 0.1.0'
    s.add_runtime_dependency 'prawn-svg', '~> 0.32.0'
-   s.add_runtime_dependency 'prawn-icon', '~> 3.0.0'
-   s.add_runtime_dependency 'safe_yaml', '~> 1.0.0'
-diff --git a/lib/asciidoctor/pdf.rb b/lib/asciidoctor/pdf.rb
-index 84f5535..475a695 100644
+-  s.add_runtime_dependency 'prawn-icon', '~> 3.0.0'
++  s.add_runtime_dependency 'prawn-icon', '~> 3.0'
+   s.add_runtime_dependency 'concurrent-ruby', '~> 1.1'
+   s.add_runtime_dependency 'treetop', '~> 1.6.0'
+ 
 --- a/lib/asciidoctor/pdf.rb
 +++ b/lib/asciidoctor/pdf.rb
-@@ -5,7 +5,7 @@ require 'asciidoctor' unless defined? Asciidoctor.load
+@@ -7,7 +7,7 @@
+ require_relative 'pdf/version'
+ require 'asciidoctor'
  require 'prawn'
- Prawn.send :remove_const, :FLOAT_PRECISION
- Prawn::FLOAT_PRECISION = 1e-3
 -require 'prawn/templates'
 +# require 'prawn/templates'
- begin
-   require 'prawn/gmagick'
- rescue LoadError
+ require_relative 'pdf/measurements'
+ require_relative 'pdf/sanitizer'
+ require_relative 'pdf/text_transformer'
