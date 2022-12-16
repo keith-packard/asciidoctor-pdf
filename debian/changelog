@@ -1,8 +1,14 @@
 ruby-asciidoctor-pdf (2.3.4-1) UNRELEASED; urgency=medium
 
-  * New upstream release.
+  * New upstream release (Closes: #1023765).
+  * d/control: update ruby-prawn version constraint.
+  * d/p/0001-Fix-dependencies-for-debian-build.patch: update content.
+  * d/p/0002-Load-data-files-from-usr-share-ruby-asciidoctor-pdf.patch:
+    refresh it.
+  * d/control: add myself as an uploader.
+  * Update upstream copyright.
 
- -- Lucas Kanashiro <kanashiro@debian.org>  Fri, 16 Dec 2022 14:27:38 -0300
+ -- Lucas Kanashiro <kanashiro@debian.org>  Fri, 16 Dec 2022 14:31:37 -0300
 
 ruby-asciidoctor-pdf (1.6.2-1) unstable; urgency=medium
 
