@@ -9,11 +9,9 @@ Signed-off-by: Keith Packard <keithp@keithp.com>
  lib/asciidoctor/pdf/theme_loader.rb | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/asciidoctor/pdf/theme_loader.rb b/lib/asciidoctor/pdf/theme_loader.rb
-index 0421dd8..46d8721 100644
 --- a/lib/asciidoctor/pdf/theme_loader.rb
 +++ b/lib/asciidoctor/pdf/theme_loader.rb
-@@ -10,7 +10,7 @@ module Asciidoctor
+@@ -9,7 +9,7 @@
        include ::Asciidoctor::PDF::Measurements
        include ::Asciidoctor::Logging
  
