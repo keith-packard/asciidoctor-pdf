@@ -3,7 +3,7 @@
 module Asciidoctor
   module PDF
     class IndexCatalog
-      include ::Asciidoctor::PDF::TextTransformer
+      include TextTransformer
 
       LeadingAlphaRx = /^\p{Alpha}/
 
@@ -20,7 +20,7 @@ module Asciidoctor
         %(__indexterm-#{@sequence += 1})
       end
 
-      def store_term names, dest = nil
+      def store_term names, dest
         if (num_terms = names.size) > 2
           store_tertiary_term names[0], names[1], names[2], dest
         elsif num_terms == 2
@@ -40,8 +40,8 @@ module Asciidoctor
         (store_primary_term primary_name).store_term secondary_name, dest
       end
 
-      def store_tertiary_term primary_name, secondary_name, tertiary_name, dest = nil
-        store_dest dest if dest
+      def store_tertiary_term primary_name, secondary_name, tertiary_name, dest
+        store_dest dest
         (store_secondary_term primary_name, secondary_name).store_term tertiary_name, dest
       end
 
@@ -60,7 +60,7 @@ module Asciidoctor
 
       def link_dest_to_page anchor, physical_page_number
         if (dest = @dests[anchor])
-          virtual_page_number = physical_page_number - (@start_page_number - 1)
+          virtual_page_number = (dest[:page_sortable] = physical_page_number) - (@start_page_number - 1)
           dest[:page] = (virtual_page_number < 1 ? (RomanNumeral.new physical_page_number, :lower) : virtual_page_number).to_s
         end
       end
@@ -70,7 +70,7 @@ module Asciidoctor
       end
 
       def categories
-        @categories.empty? ? [] : @categories.values.sort
+        @categories.values.sort
       end
     end
 
@@ -83,14 +83,10 @@ module Asciidoctor
         @terms = {}
       end
 
-      def store_term name, dest = nil
+      def store_term name, dest
         term = (@terms[name] ||= (IndexTerm.new name))
         term.add_dest dest if dest
         term
-      end
-
-      def find_term name
-        @terms[name]
       end
 
       def terms
@@ -118,7 +114,7 @@ module Asciidoctor
       end
 
       def dests
-        @dests.select {|d| d.key? :page }.sort {|a, b| a[:page] <=> b[:page] }
+        @dests.select {|d| d.key? :page }.sort_by {|d| d[:page_sortable] }
       end
 
       def container?

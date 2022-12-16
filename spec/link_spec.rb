@@ -17,7 +17,7 @@ describe 'Asciidoctor::PDF::Converter - Link' do
       link_text = (pdf.find_text 'https://asciidoctor.org')[0]
       (expect link_text).not_to be_nil
       (expect link_text[:font_color]).to eql '428BCA'
-      (expect link_text[:x]).to eql link_annotation[:Rect][0]
+      (expect link_annotation).to annotate link_text
     end
 
     it 'should decode character references in the href' do
@@ -49,6 +49,17 @@ describe 'Asciidoctor::PDF::Converter - Link' do
       (expect link[:A][:URI]).to eql 'https://asciidoctor.org'
     end
 
+    it 'should not encode hash that precedes the fragment in a URL' do
+      url_with_hash = 'https://github.com/asciidoctor/asciidoctor-pdf/blob/main/docs/theming-guide.adoc#fonts'
+      pdf = to_pdf %(Learn how to configure #{url_with_hash}[].)
+      text = (pdf.page 1).text
+      (expect text).to eql %(Learn how to configure #{url_with_hash.sub 'theming-guide', "theming-\nguide"}.)
+      annotations = get_annotations pdf, 1
+      (expect annotations).to have_size 2
+      (expect annotations[0][:A][:URI]).to eql url_with_hash
+      (expect annotations[1][:A][:URI]).to eql url_with_hash
+    end
+
     it 'should split bare URL on breakable characters' do
       [
         'the URL on this line will get split on the ? char https://github.com/asciidoctor/asciidoctor/issues?|q=milestone%3Av2.0.x',
@@ -62,6 +73,23 @@ describe 'Asciidoctor::PDF::Converter - Link' do
         (expect lines[0]).to end_with before
         (expect lines[1]).to start_with after
       end
+    end
+
+    it 'should not break on last character of bare URL' do
+      pdf = to_pdf <<~'EOS', analyze: true
+      https://this.is.a.very.long.url.that.is.going.to.be.split.at.a.breakable.location.com/verylongpathname?a[]
+      EOS
+      lines = pdf.lines
+      (expect lines).to have_size 2
+      (expect lines[0]).to end_with '/'
+      (expect lines[1]).to eql 'verylongpathname?a'
+    end
+
+    it 'should not attempt to break URL when URL is a bare scheme' do
+      pdf = to_pdf 'link:https://[]', analyze: true
+      lines = pdf.lines
+      (expect lines).to have_size 1
+      (expect lines[0]).to eql 'https://'
     end
 
     it 'should not split bare URL when using an AFM font' do
@@ -82,7 +110,7 @@ describe 'Asciidoctor::PDF::Converter - Link' do
       (expect lines[1]).to eql 'https://goo.gl/search/asciidoctor'
     end
 
-    it 'should reveal URL of link by default when media=print or media=prepress' do
+    it 'should reveal URL of link when media=print or media=prepress' do
       %w(print prepress).each do |media|
         pdf = to_pdf <<~'EOS', attribute_overrides: { 'media' => media }, analyze: true
         https://asciidoctor.org[Asciidoctor] is a text processor.
@@ -102,7 +130,7 @@ describe 'Asciidoctor::PDF::Converter - Link' do
       (expect pdf.lines).to eql ['Asciidoctor [https://asciidoctor.org] is a text processor.']
     end
 
-    it 'should not reveal URL of link when show-link-uri is unset in document even media is print or prepress' do
+    it 'should not reveal URL of link when show-link-uri is unset in document even when media is print or prepress' do
       %w(print prepress).each do |media|
         pdf = to_pdf <<~'EOS', attribute_overrides: { 'media' => media }, analyze: true
         :!show-link-uri:
@@ -133,7 +161,7 @@ describe 'Asciidoctor::PDF::Converter - Link' do
       [{ 'media' => 'print' }, { 'media' => 'prepress' }, { 'show-link-uri' => '' }].each do |attribute_overrides|
         inputs.each do |text|
           before, after = text.split '|', 2
-          expected_before = before.sub 'https://', 'link [https://'
+          expected_before = before.sub 'https://', 'link [ https://'
           expected_after = after.sub '[link]', ']'
           pdf = to_pdf %(#{before}#{after}), attribute_overrides: attribute_overrides, analyze: true
           lines = pdf.lines
@@ -147,22 +175,34 @@ describe 'Asciidoctor::PDF::Converter - Link' do
 
   context 'Email' do
     it 'should convert bare email address to link' do
-      pdf = to_pdf 'Send a message to doc.writer@example.org.'
+      input = 'Send a message to doc.writer@example.org.'
+      pdf = to_pdf input
       annotations = get_annotations pdf, 1
       (expect annotations).to have_size 1
       link_annotation = annotations[0]
       (expect link_annotation[:Subtype]).to be :Link
       (expect link_annotation[:A][:URI]).to eql 'mailto:doc.writer@example.org'
+      pdf = to_pdf input, analyze: true
+      link_text = pdf.find_unique_text 'doc.writer@example.org'
+      (expect link_text).not_to be_nil
+      (expect link_text[:font_color]).to eql '428BCA'
+      (expect link_annotation).to annotate link_text
     end
 
     it 'should create email address link' do
-      pdf = to_pdf 'Send a message to mailto:doc.writer@example.org[Doc Writer].'
+      input = 'Send a message to mailto:doc.writer@example.org[Doc Writer].'
+      pdf = to_pdf input
       annotations = get_annotations pdf, 1
       (expect annotations).to have_size 1
       link_annotation = annotations[0]
       (expect link_annotation[:Subtype]).to be :Link
       (expect link_annotation[:A][:URI]).to eql 'mailto:doc.writer@example.org'
       (expect (pdf.page 1).text).to include 'Doc Writer'
+      pdf = to_pdf input, analyze: true
+      link_text = pdf.find_unique_text 'Doc Writer'
+      (expect link_text).not_to be_nil
+      (expect link_text[:font_color]).to eql '428BCA'
+      (expect link_annotation).to annotate link_text
     end
 
     it 'should show mailto address of bare email when media=prepress' do
@@ -175,7 +215,7 @@ describe 'Asciidoctor::PDF::Converter - Link' do
       (expect link_annotation[:A][:URI]).to eql 'mailto:doc.writer@example.org'
 
       pdf = to_pdf input, attribute_overrides: { 'media' => 'prepress' }, analyze: true
-      (expect pdf.lines[0]).to eql 'Send message to doc.writer@example.org [mailto:doc.writer@example.org].'
+      (expect pdf.lines[0]).to eql 'Send message to doc.writer@example.org.'
     end
 
     it 'should show mailto address of email link when media=prepress' do
@@ -218,9 +258,26 @@ describe 'Asciidoctor::PDF::Converter - Link' do
     end
   end
 
+  context 'Unknown' do
+    it 'should show warning if anchor type is unknown' do
+      linkme_inline_macro_impl = proc do
+        named 'linkme'
+        process do |parent, target|
+          create_anchor parent, target, type: :unknown
+        end
+      end
+      opts = { extension_registry: Asciidoctor::Extensions.create { inline_macro(&linkme_inline_macro_impl) } }
+      (expect do
+        pdf = to_pdf 'before linkme:foobar[] after', (opts.merge analyze: true)
+        (expect pdf.lines).to eql ['before after']
+      end).to log_message severity: :WARN, message: 'unknown anchor type: :unknown'
+    end
+  end
+
   context 'Theming' do
     it 'should apply text decoration to link defined by theme' do
       pdf_theme = {
+        link_font_style: 'italic',
         link_text_decoration: 'underline',
       }
       input = 'The home page for Asciidoctor is located at https://asciidoctor.org.'
@@ -230,22 +287,25 @@ describe 'Asciidoctor::PDF::Converter - Link' do
       underline = lines[0]
       pdf = to_pdf input, pdf_theme: pdf_theme, analyze: true
       link_text = (pdf.find_text 'https://asciidoctor.org')[0]
+      (expect link_text[:font_name]).to eql 'NotoSerif-Italic'
       (expect link_text[:font_color]).to eql underline[:color]
       (expect underline[:width]).to be_nil
     end
 
     it 'should allow theme to set width and color of text decoration' do
-      pdf_theme = {
-        link_text_decoration: 'underline',
-        link_text_decoration_color: '0000FF',
-        link_text_decoration_width: 0.5,
-      }
-      pdf = to_pdf 'The home page for Asciidoctor is located at https://asciidoctor.org.', pdf_theme: pdf_theme, analyze: :line
-      lines = pdf.lines
-      (expect lines).to have_size 1
-      underline = lines[0]
-      (expect underline[:color]).to eql '0000FF'
-      (expect underline[:width]).to eql 0.5
+      [:base_text_decoration_width, :link_text_decoration_width].each do |key|
+        pdf_theme = {
+          link_text_decoration: 'underline',
+          link_text_decoration_color: '0000FF',
+        }
+        pdf_theme[key] = 0.5
+        pdf = to_pdf 'The home page for Asciidoctor is located at https://asciidoctor.org.', pdf_theme: pdf_theme, analyze: :line
+        lines = pdf.lines
+        (expect lines).to have_size 1
+        underline = lines[0]
+        (expect underline[:color]).to eql '0000FF'
+        (expect underline[:width]).to eql 0.5
+      end
     end
   end
 end

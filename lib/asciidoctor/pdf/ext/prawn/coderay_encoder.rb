@@ -14,8 +14,6 @@
 #
 ######################################################################
 
-require 'coderay'
-
 # Registers a to_prawn method with CodeRay. The method returns an array of hashes to be
 # used with Prawn::Text.formatted_text(array).
 #
@@ -71,7 +69,7 @@ module Asciidoctor
         super
         @out  = []
         @open = []
-        # NOTE tracks whether text token begins at the start of a line
+        # NOTE: tracks whether text token begins at the start of a line
         @start_of_line = true
       end
 
@@ -79,17 +77,17 @@ module Asciidoctor
         if text == LF
           @out << { text: text }
           @start_of_line = true
-        # NOTE text is nil and kind is :error when CodeRay ends parsing on an error
+        # NOTE: text is nil and kind is :error when CodeRay ends parsing on an error
         elsif text
-          # NOTE add guard character to prevent Prawn from trimming indentation
+          # NOTE: add guard character to prevent Prawn from trimming indentation
           text[0] = GuardedIndent if @start_of_line && (text.start_with? ' ')
           text.gsub! InnerIndent, GuardedInnerIndent if text.include? InnerIndent
 
-          # NOTE this optimization assumes we don't support/use background colors
+          # NOTE: this optimization assumes we don't support/use background colors
           if text.rstrip.empty?
             @out << { text: text }
           else
-            # QUESTION should we default to no color?
+            # QUESTION: should we default to no color?
             @out << { text: text, color: (COLORS[kind] || COLORS[@open[-1]] || COLORS[:default]) }
           end
           @start_of_line = text.end_with? LF

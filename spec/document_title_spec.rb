@@ -25,15 +25,26 @@ describe 'Asciidoctor::PDF::Converter - Document Title' do
       (expect subtitle_text[:y]).to be < main_title_text[:y]
     end
 
-    it 'should not include title page if notitle attribute is set' do
-      pdf = to_pdf <<~'EOS', doctype: :book, analyze: :page
-      = Document Title
-      :notitle:
+    it 'should use custom separator to partition document title' do
+      pdf = to_pdf <<~'EOS', analyze: true
+      [separator=" -"]
+      = Main Title - Subtitle
+      :doctype: book
 
       body
       EOS
-      (expect pdf.pages).to have_size 1
-      (expect pdf.pages[0][:strings]).not_to include 'Document Title'
+
+      title_page_texts = pdf.find_text page_number: 1
+      (expect title_page_texts).to have_size 2
+      main_title_text = title_page_texts[0]
+      subtitle_text = title_page_texts[1]
+      (expect main_title_text[:string]).to eql 'Main Title'
+      (expect main_title_text[:font_color]).to eql '999999'
+      (expect main_title_text[:font_name]).to eql 'NotoSerif'
+      (expect subtitle_text[:string]).to eql 'Subtitle'
+      (expect subtitle_text[:font_color]).to eql '333333'
+      (expect subtitle_text[:font_name]).to eql 'NotoSerif-BoldItalic'
+      (expect subtitle_text[:y]).to be < main_title_text[:y]
     end
   end
 
@@ -54,8 +65,8 @@ describe 'Asciidoctor::PDF::Converter - Document Title' do
       (expect doctitle_text[:y]).to be > body_text[:y]
     end
 
-    it 'should align document title according to value of heading_h1_align theme key' do
-      pdf = to_pdf <<~'EOS', pdf_theme: { heading_h1_align: 'left' }, analyze: true
+    it 'should align document title according to value of heading_h1_text_align theme key' do
+      pdf = to_pdf <<~'EOS', pdf_theme: { heading_h1_text_align: 'left' }, analyze: true
       = Document Title
 
       body

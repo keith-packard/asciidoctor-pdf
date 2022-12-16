@@ -19,6 +19,26 @@ describe 'Asciidoctor::PDF::Converter - Preamble' do
       (expect second_paragraph_text[0][:font_size]).to eql 10.5
     end
 
+    it 'should not crash if preamble has no blocks' do
+      doc = Asciidoctor.load <<~'EOS', backend: :pdf, standalone: true
+      = Document Title
+      :nofooter:
+
+      --
+      --
+
+      == Section
+
+      content
+      EOS
+
+      doc.blocks[0].blocks.clear
+      doc.convert.render (pdf_io = StringIO.new)
+      pdf = PDF::Reader.new pdf_io
+      lines = (pdf.page 1).text.strip.squeeze.split ?\n
+      (expect lines).to eql ['Document Title', 'Section', 'content']
+    end
+
     it 'should not style first paragraph of preamble as lead in article with no sections' do
       pdf = to_pdf <<~'EOS', analyze: true
       = Document Title
@@ -169,6 +189,30 @@ describe 'Asciidoctor::PDF::Converter - Preamble' do
       (expect after_that_text[0][:font_size]).to eql 10.5
     end
 
+    it 'should ignore abstract with no blocks' do
+      pdf = to_pdf <<~'EOS', analyze: true
+      = Document Title
+      :doctype: book
+
+      [abstract]
+      --
+      --
+
+      == First Chapter
+
+      content
+
+      == Second Chapter
+
+      content
+      EOS
+
+      (expect pdf.pages).to have_size 3
+      first_chapter_text = pdf.find_unique_text 'First Chapter'
+      second_chapter_text = pdf.find_unique_text 'Second Chapter'
+      (expect first_chapter_text[:y]).to eql second_chapter_text[:y]
+    end
+
     it 'should promote preamble to preface if preface-title is set' do
       pdf = to_pdf <<~'EOS', analyze: true
       = Document Title
@@ -182,7 +226,7 @@ describe 'Asciidoctor::PDF::Converter - Preamble' do
       chapter content
       EOS
 
-      (expect pdf.find_text string: 'Preface', page_number: 2, font_size: 22).to have_size 1
+      (expect pdf.find_text 'Preface', page_number: 2, font_size: 22).to have_size 1
       preamble_text = pdf.find_text 'preamble content'
       (expect preamble_text).to have_size 1
       (expect preamble_text[0][:font_size]).to eql 10.5
@@ -195,8 +239,8 @@ describe 'Asciidoctor::PDF::Converter - Preamble' do
   context 'theming' do
     it 'should allow theme to customize style of lead paragraph' do
       pdf_theme = {
-        lead_font_size: 14,
-        lead_font_color: '000000',
+        role_lead_font_size: 14,
+        role_lead_font_color: '000000',
       }
       pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, analyze: true
       = Document Title
@@ -218,28 +262,6 @@ describe 'Asciidoctor::PDF::Converter - Preamble' do
       (expect more_preamble_text).to have_size 1
       (expect more_preamble_text[0][:font_size]).to eql 10.5
       (expect more_preamble_text[0][:font_color]).to eql '333333'
-    end
-
-    it 'should apply the lead style to a paragraph with the lead role' do
-      pdf = to_pdf <<~'EOS', analyze: true
-      = Document Title
-
-      preamble content
-
-      [.lead]
-      more preamble content
-
-      == First Section
-
-      section content
-      EOS
-
-      preamble_text = pdf.find_text 'preamble content'
-      (expect preamble_text).to have_size 1
-      (expect preamble_text[0][:font_size]).to be 13
-      more_preamble_text = pdf.find_text 'more preamble content'
-      (expect more_preamble_text).to have_size 1
-      (expect more_preamble_text[0][:font_size]).to be 13
     end
   end
 end

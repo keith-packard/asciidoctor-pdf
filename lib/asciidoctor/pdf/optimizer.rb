@@ -4,10 +4,9 @@ require 'pathname'
 require 'rghost'
 require 'rghost/gs_alone'
 require 'tmpdir'
+autoload :Open3, 'open3'
 
 RGhost::GSAlone.prepend (Module.new do
-  WindowsRx = /win|ming/
-
   def initialize params, debug
     (@params = params.dup).push(*(@params.pop.split File::PATH_SEPARATOR))
     @debug = debug
@@ -17,7 +16,11 @@ RGhost::GSAlone.prepend (Module.new do
     RGhost::Config.config_platform unless File.exist? RGhost::Config::GS[:path].to_s
     (cmd = @params.slice 1, @params.length).unshift RGhost::Config::GS[:path].to_s
     #puts cmd if @debug
-    system(*cmd)
+    _out, err, status = Open3.capture3(*cmd)
+    unless (lines = err.lines.each_with_object([]) {|l, accum| (l.include? '-dNEWPDF=') ? accum.pop : (accum << l) }).empty?
+      $stderr.write(*lines)
+    end
+    status.success?
   end
 end)
 
@@ -41,10 +44,12 @@ module Asciidoctor
 
       attr_reader :quality
       attr_reader :compatibility_level
+      attr_reader :compliance
 
-      def initialize quality = 'default', compatibility_level = '1.4'
+      def initialize quality = 'default', compatibility_level = '1.4', compliance = 'PDF'
         @quality = QUALITY_NAMES[quality]
         @compatibility_level = compatibility_level
+        @compliance = compliance
         if (gs_path = ::ENV['GS'])
           ::RGhost::Config::GS[:path] = gs_path
         end
@@ -59,10 +64,16 @@ module Asciidoctor
           else
             inputs = target
           end
-          (::RGhost::Convert.new inputs).to :pdf,
-              filename: filename_tmp.to_s,
-              quality: @quality,
-              d: { Printed: false, CannotEmbedFontPolicy: '/Warning', CompatibilityLevel: @compatibility_level }
+          d = { CannotEmbedFontPolicy: '/Warning', CompatibilityLevel: @compatibility_level, NEWPDF: false, Printed: false }
+          case @compliance
+          when 'PDF/A', 'PDF/A-1', 'PDF/A-2', 'PDF/A-3'
+            d[:PDFA] = ((@compliance.split '-', 2)[1] || 1).to_i
+            d[:ShowAnnots] = false
+          when 'PDF/X', 'PDF/X-1', 'PDF/X-3'
+            d[:PDFX] = true
+            d[:ShowAnnots] = false
+          end
+          (::RGhost::Convert.new inputs).to :pdf, filename: filename_tmp.to_s, quality: @quality, d: d
           filename_o.binwrite filename_tmp.binread
         end
         nil

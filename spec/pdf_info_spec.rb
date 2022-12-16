@@ -62,6 +62,76 @@ describe 'Asciidoctor::PDF::Converter - PDF Info' do
       end
     end
 
+    it 'should set Author and Producer field using authors attribute with non-Latin characters' do
+      ['Doc Writer; Antonín Dvořák', ':authors: Doc Writer; Antonín Dvořák'].each do |author_line|
+        pdf = to_pdf <<~EOS
+        = Document Title
+        #{author_line}
+
+        [%hardbreaks]
+        First Author: {author_1}
+        Second Author: {author_2}
+        EOS
+        lines = ((pdf.page 1).text.split ?\n).map(&:strip)
+        (expect pdf.info[:Producer]).to eql pdf.info[:Author]
+        (expect pdf.info[:Author]).to eql 'Doc Writer, Antonín Dvořák'
+        (expect lines).to include 'First Author: Doc Writer'
+        (expect lines).to include 'Second Author: Antonín Dvořák'
+      end
+    end
+
+    it 'should set Author field to value of author attribute if locked by the API' do
+      pdf = to_pdf <<~'EOS', attribute_overrides: { 'author' => 'Doc Writer' }
+      = Document Title
+      Author Name
+
+      content
+      EOS
+      (expect pdf.info[:Author]).to eql 'Doc Writer'
+    end
+
+    it 'should set Author field to value of authors attribute if locked by the API' do
+      pdf = to_pdf <<~'EOS', attribute_overrides: { 'authors' => 'Doc Writer' }
+      = Document Title
+      Author Name
+
+      content
+      EOS
+      (expect pdf.info[:Author]).to eql 'Doc Writer'
+    end
+
+    it 'should set Author field to value of authors attribute if both author and authors attributes are locked by the API' do
+      pdf = to_pdf <<~'EOS', attribute_overrides: { 'authors' => 'Doc Writer', 'author' => 'Anonymous' }
+      = Document Title
+      Author Name
+
+      content
+      EOS
+      (expect pdf.info[:Author]).to eql 'Doc Writer'
+    end
+
+    it 'should set Author field to value of author attribute if document has no doctitle' do
+      pdf = to_pdf <<~'EOS'
+      :author: Author Name
+
+      == Section Title
+
+      content
+      EOS
+      (expect pdf.info[:Author]).to eql 'Author Name'
+    end
+
+    it 'should set Author field to value of authors attribute if document has no doctitle' do
+      pdf = to_pdf <<~'EOS'
+      :authors: Author Name
+
+      == Section Title
+
+      content
+      EOS
+      (expect pdf.info[:Author]).to eql 'Author Name'
+    end
+
     it 'should set Producer field to value of publisher attribute if set' do
       pdf = to_pdf <<~'EOS'
       = Document Title
@@ -94,6 +164,24 @@ describe 'Asciidoctor::PDF::Converter - PDF Info' do
       (expect pdf.info[:Keywords]).to eql 'cooking, diet, plants'
     end
 
+    it 'should sanitize values of Author, Subject, Keywords, and Producer fields' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+      D&#95;J Allen
+      :subject: Science &amp; Math
+      :keywords: mass&#8211;energy equivalence
+      :publisher: Schr&#246;dinger&#8217;s Cat
+
+      content
+      EOS
+
+      pdf_info = pdf.info
+      (expect pdf_info[:Author]).to eql 'D_J Allen'
+      (expect pdf_info[:Subject]).to eql 'Science & Math'
+      (expect pdf_info[:Keywords]).to eql 'mass–energy equivalence'
+      (expect pdf_info[:Producer]).to eql 'Schrödinger’s Cat'
+    end
+
     it 'should parse date attributes as local date objects' do
       pdf = to_pdf 'content', attribute_overrides: { 'docdatetime' => '2019-01-15', 'localdatetime' => '2019-01-15' }
       (expect pdf.info[:ModDate]).not_to be_nil
@@ -102,13 +190,33 @@ describe 'Asciidoctor::PDF::Converter - PDF Info' do
       (expect pdf.info[:CreationDate]).to start_with 'D:20190115000000'
     end
 
-    it 'should use current date as fallback when date attributes cannot be parsed' do
+    it 'should set date attributes to same current date when date attributes cannot be parsed' do
       pdf = to_pdf 'content', attribute_overrides: { 'docdatetime' => 'garbage', 'localdatetime' => 'garbage' }
       (expect pdf.info[:ModDate]).not_to be_nil
       (expect pdf.info[:ModDate]).to start_with 'D:'
       (expect pdf.info[:CreationDate]).not_to be_nil
       (expect pdf.info[:CreationDate]).to start_with 'D:'
       (expect pdf.info[:ModDate]).to eql pdf.info[:CreationDate]
+    end
+
+    it 'should use current date as fallback when docdatetime cannot be parsed' do
+      expected = (Time.now.strftime '%s').to_i
+      pdf = to_pdf 'content', attribute_overrides: { 'docdatetime' => 'garbage' }
+      mod_date = pdf.info[:ModDate]
+      (expect mod_date).not_to be_nil
+      (expect mod_date).to start_with 'D:'
+      actual = ((DateTime.parse (mod_date.slice 2, mod_date.length).gsub ?', '').strftime '%s').to_i
+      (expect actual).to be_within(1).of(expected)
+    end
+
+    it 'should use current date as fallback when localdatetime cannot be parsed' do
+      expected = (Time.now.strftime '%s').to_i
+      pdf = to_pdf 'content', attribute_overrides: { 'localdatetime' => 'garbage' }
+      creation_date = pdf.info[:CreationDate]
+      (expect creation_date).not_to be_nil
+      (expect creation_date).to start_with 'D:'
+      actual = ((DateTime.parse (creation_date.slice 2, creation_date.length).gsub ?', '').strftime '%s').to_i
+      (expect actual).to be_within(1).of(expected)
     end
 
     it 'should not add dates to document if reproducible attribute is set' do
@@ -136,19 +244,17 @@ describe 'Asciidoctor::PDF::Converter - PDF Info' do
 
     it 'should set mod and creation dates to match SOURCE_DATE_EPOCH environment variable' do
       old_source_date_epoch = ENV.delete 'SOURCE_DATE_EPOCH'
-      begin
-        ENV['SOURCE_DATE_EPOCH'] = '1234123412'
-        pdf = to_pdf 'content'
-        (expect pdf.info[:ModDate]).to eql 'D:20090208200332+00\'00\''
-        (expect pdf.info[:CreationDate]).to eql 'D:20090208200332+00\'00\''
-      ensure
-        if old_source_date_epoch
-          ENV['SOURCE_DATE_EPOCH'] = old_source_date_epoch
-        else
-          ENV.delete 'SOURCE_DATE_EPOCH'
-        end
+      ENV['SOURCE_DATE_EPOCH'] = '1234123412'
+      pdf = to_pdf 'content'
+      (expect pdf.info[:ModDate]).to eql 'D:20090208200332+00\'00\''
+      (expect pdf.info[:CreationDate]).to eql 'D:20090208200332+00\'00\''
+    ensure
+      if old_source_date_epoch
+        ENV['SOURCE_DATE_EPOCH'] = old_source_date_epoch
+      else
+        ENV.delete 'SOURCE_DATE_EPOCH'
       end
-    end if asciidoctor_1_5_7_or_better?
+    end
   end
 
   context 'document title' do
@@ -203,6 +309,30 @@ describe 'Asciidoctor::PDF::Converter - PDF Info' do
       stream = objects[objects[pages[:Kids][0]][:Contents]]
       (expect stream.hash[:Filter]).to eql [:FlateDecode]
       (expect stream.data).not_to include '/DeviceRGB'
+    end
+
+    it 'should not compress streams when compress attribute is set on document and page is imported' do
+      pdf = to_pdf <<~'EOS', attribute_overrides: { 'compress' => '' }
+      before
+
+      image::red-green-blue.pdf[page=1]
+
+      after
+      EOS
+      objects = pdf.objects
+      pages = pdf.objects.values.find {|it| Hash === it && it[:Type] == :Pages }
+      objects[pages[:Kids][1]][:Contents].map {|it| objects[it] }.each do |stream|
+        (expect stream.hash[:Filter]).to be_nil
+        (expect stream.data).to include '/DeviceRGB'
+      end
+
+      stream = objects[objects[pages[:Kids][0]][:Contents]]
+      (expect stream.hash[:Filter]).to be_nil
+      (expect stream.data).to include '/DeviceRGB'
+
+      stream = objects[objects[pages[:Kids][2]][:Contents]]
+      (expect stream.hash[:Filter]).to be_nil
+      (expect stream.data).to include '/DeviceRGB'
     end
   end
 end

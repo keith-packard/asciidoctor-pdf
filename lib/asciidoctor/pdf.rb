@@ -1,15 +1,13 @@
 # frozen_string_literal: true
 
+autoload :Set, 'set'
+autoload :StringIO, 'stringio'
+autoload :Tempfile, 'tempfile'
+require 'time' unless defined? Time.parse
 require_relative 'pdf/version'
-require 'asciidoctor' unless defined? Asciidoctor.load
+require 'asciidoctor'
 require 'prawn'
-Prawn.send :remove_const, :FLOAT_PRECISION
-Prawn::FLOAT_PRECISION = 1e-3
 require 'prawn/templates'
-begin
-  require 'prawn/gmagick'
-rescue LoadError
-end unless defined? GMagick::Image
 require_relative 'pdf/measurements'
 require_relative 'pdf/sanitizer'
 require_relative 'pdf/text_transformer'

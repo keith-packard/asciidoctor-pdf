@@ -24,7 +24,7 @@ describe 'Asciidoctor::PDF::Converter - Manpage' do
     *-v*:: Prints the version.
     EOS
 
-    expected_name_title = asciidoctor_1_5_7_or_better? ? 'Name' : '1. NAME'
+    expected_name_title = 'Name'
     name_title_text = (pdf.find_text expected_name_title)[0]
     (expect name_title_text).not_to be_nil
     (expect name_title_text[:font_size]).to be 22
@@ -52,17 +52,15 @@ describe 'Asciidoctor::PDF::Converter - Manpage' do
     (expect lots_text[:font_name]).to eql 'NotoSerif-Bold'
   end
 
-  it 'should uppercase title of name section if other sections are uppercase' do
+  it 'should uppercase title of auto-generated name section if other sections are uppercase' do
     pdf = to_pdf <<~'EOS', doctype: :manpage, analyze: true
     = cmd(1)
     Author Name
     v1.0.0
     :manmanual: CMD
     :mansource: CMD
-
-    == NAME
-
-    cmd - does stuff
+    :manname: cmd
+    :manpurpose: does stuff
 
     == SYNOPSIS
 
@@ -73,8 +71,54 @@ describe 'Asciidoctor::PDF::Converter - Manpage' do
     *-v*:: Prints the version.
     EOS
 
-    name_title_text = (pdf.find_text 'NAME')[0]
+    name_title_text = pdf.find_unique_text 'NAME'
     (expect name_title_text).not_to be_nil
     (expect name_title_text[:font_size]).to be 22
-  end if asciidoctor_1_5_7_or_better?
+    (expect pdf.lines).to include 'cmd - does stuff'
+  end
+
+  it 'should not uppercase title of auto-generated name section if no other sections are found' do
+    pdf = to_pdf <<~'EOS', doctype: :manpage, analyze: true
+    = cmd(1)
+    Author Name
+    v1.0.0
+    :manmanual: CMD
+    :mansource: CMD
+    :manname: cmd
+    :manpurpose: does stuff
+    EOS
+
+    name_title_text = pdf.find_unique_text 'Name'
+    (expect name_title_text).not_to be_nil
+    (expect name_title_text[:font_size]).to be 22
+    (expect pdf.lines).to include 'cmd - does stuff'
+  end
+
+  it 'should arrange body of manpage into columns if specified in theme' do
+    pdf = to_pdf <<~'EOS', doctype: :manpage, pdf_theme: { page_columns: 2 }, analyze: true
+    = cmd(1)
+
+    == Name
+
+    cmd - does stuff
+
+    == Synopsis
+
+    *cmd* [_OPTION_]... _FILE_...
+
+    [.column]
+    <<<
+
+    == Options
+
+    *-v*:: Prints the version.
+    EOS
+
+    midpoint = (get_page_size pdf)[0] * 0.5
+    name_text = pdf.find_unique_text 'Name'
+    options_text = pdf.find_unique_text 'Options'
+    (expect name_text[:x]).to eql 48.24
+    (expect options_text[:x]).to be > midpoint
+    (expect name_text[:y]).to eql options_text[:y]
+  end
 end

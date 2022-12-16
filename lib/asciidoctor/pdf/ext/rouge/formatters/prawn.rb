@@ -28,7 +28,7 @@ module Rouge
 
       def initialize opts = {}
         unless ::Rouge::Theme === (theme = opts[:theme])
-          unless theme && (theme = ::Rouge::Theme.find theme)
+          unless theme && ((::Class === theme && theme < ::Rouge::Theme) || (theme = ::Rouge::Theme.find theme))
             theme = ::Rouge::Themes::AsciidoctorPDFDefault
           end
           theme = theme.new
@@ -41,13 +41,7 @@ module Rouge
       end
 
       def background_color
-        @background_color ||= (normalize_color (@theme.style_for Tokens::Text).bg)
-      end
-
-      # Override format method so fragments don't get flatted to a string
-      # and to add an options Hash.
-      def format tokens, opts = {}
-        stream tokens, opts
+        @background_color ||= (normalize_color ((@theme.style_for Tokens::Text) || (::Rouge::Theme::Style.new @theme)).bg)
       end
 
       def stream tokens, opts = {}
@@ -65,7 +59,7 @@ module Rouge
               line_numbers ? (fragments << (create_linenum_fragment linenum)) : (start_of_line = true)
               fragments << @highlight_line_fragment.dup if highlight_lines && highlight_lines[linenum]
             elsif val.include? LF
-              # NOTE we assume if the fragment ends in a line feed, the intention was to match a line-oriented form
+              # NOTE: we assume if the fragment ends in a line feed, the intention was to match a line-oriented form
               line_oriented = val.end_with? LF
               base_fragment = create_fragment tok, val
               val.each_line do |line|
@@ -75,7 +69,7 @@ module Rouge
                 end
                 fragments << (line_oriented ? (base_fragment.merge text: line, inline_block: true) : (base_fragment.merge text: line))
                 next unless line.end_with? LF
-                # NOTE eagerly append linenum fragment or line highlight if there's a next line
+                # NOTE: eagerly append linenum fragment or line highlight if there's a next line
                 linenum += 1
                 line_numbers ? (fragments << (create_linenum_fragment linenum)) : (start_of_line = true)
                 fragments << @highlight_line_fragment.dup if highlight_lines && highlight_lines[linenum]
@@ -88,10 +82,10 @@ module Rouge
               fragments << (create_fragment tok, val)
             end
           end
-          # NOTE pad numbers that have less digits than the largest line number
-          # FIXME we could store these fragments so we don't have find them again
+          # NOTE: pad numbers that have less digits than the largest line number
+          # FIXME: we could store these fragments so we don't have find them again
           if line_numbers && (linenum_w = linenum.to_s.length) > 1
-            # NOTE extra column is the trailing space after the line number
+            # NOTE: extra column is the trailing space after the line number
             linenum_w += 1
             fragments.each do |fragment|
               fragment[:text] = (fragment[:text].rjust linenum_w, NoBreakSpace).to_s if fragment[:linenum]
@@ -108,16 +102,20 @@ module Rouge
             else
               val[0] = GuardedIndent if start_of_line && (val.start_with? ' ')
               val.gsub! InnerIndent, GuardedInnerIndent if val.include? InnerIndent
-              # QUESTION do we need the call to create_fragment if val contains only spaces? consider bg
+              # QUESTION: do we need the call to create_fragment if val contains only spaces? consider bg
               #fragment = create_fragment tok, val
               fragment = val.rstrip.empty? ? { text: val } : (create_fragment tok, val)
-              # NOTE we assume if the fragment ends in a line feed, the intention was to match a line-oriented form
+              # NOTE: we assume if the fragment ends in a line feed, the intention was to match a line-oriented form
               fragment[:inline_block] = true if (start_of_line = val.end_with? LF)
               fragment
             end
           end
         end
       end
+
+      # Override format method so fragments don't get flatted to a string
+      # and to add an options Hash.
+      alias format stream
 
       # TODO: method could still be optimized (for instance, check if val is LF or empty)
       def create_fragment tok, val = nil
@@ -144,7 +142,7 @@ module Rouge
           end
           if style_rules[:underline]
             if fragment.key? :styles
-              fragment[:styles] << UnderlineStyle[0]
+              fragment[:styles] |= UnderlineStyle
             else
               fragment[:styles] = UnderlineStyle.dup
             end
@@ -174,9 +172,8 @@ module Rouge
         if (normalized = @normalized_colors[raw])
           normalized
         else
-          normalized = (raw.start_with? '#') ? (raw.slice 1, raw.length) : raw
-          normalized = normalized.each_char.map {|c| c * 2 }.join if normalized.length == 3
-          @normalized_colors[raw] = normalized
+          normalized = raw.slice 1, raw.length
+          @normalized_colors[raw] = normalized.length == 3 ? normalized.each_char.map {|c| c * 2 }.join : normalized
         end
       end
 
@@ -199,7 +196,7 @@ module Rouge
           end
           pdf.fill_rectangle [fragment.left, fragment.top + v_gap * 0.5], fragment_width, (fragment.height + v_gap)
           pdf.fill_color prev_fill_color
-          fragment.conceal if fragment.text == DummyText
+          fragment.conceal true if fragment.text == DummyText
           nil
         end
       end

@@ -24,7 +24,7 @@ endif::[]
 :url-project: https://github.com/asciidoctor/asciidoctor-pdf
 :url-project-repo: {url-project}
 :url-project-issues: {url-project-repo}/issues
-:url-project-list: https://discuss.asciidoctor.org
+:url-project-chat: https://asciidoctor.zulipchat.com
 :url-rvm: http://rvm.io
 
 This guide provides all the information you need to become a successful Asciidoctor PDF developer and code contributor!
@@ -36,13 +36,48 @@ toc::[]
 
 To contribute code, fork the project on GitHub, hack away, and send a pull request with your proposed changes.
 *All pull requests must include a) tests that verify the code change and b) an entry in the CHANGELOG.adoc file to document what changed.*
-If a pull request is missing tests or a CHANGELOG entry, *it will not be merged*.
+If a pull request is missing tests or a CHANGELOG entry, *it will not be merged* and may be closed.
 
-Feel free to use the {url-project-issues}[issue tracker] or {url-project-list}[Asciidoctor mailing list] to provide feedback or suggestions in other ways.
+Feel free to share ideas in the *#users/asciidoctor-pdf* stream of the {url-project-chat}[project chat] or report issues in the {url-project-issues}[issue tracker].
+
+IMPORTANT: When filing an issue, you must include the AsciiDoc source and theme file (if relevant) that demonstrates the problem.
+Sharing a screenshot of the output is not sufficient information to reproduce the issue and therefore not actionable.
+If the AsciiDoc source is not provided within 24 hours of filing the issue, the issue will be closed.
+A reproducible test case is required (in any form you can provide it) so we can concentrate our time on fixing the problem instead of trying to reverse engineer the scenario.
 
 Follow the instructions below to learn how to clone the source and run it from your local copy.
 
 == Development
+
+=== Prerequisites
+
+In order to set up the project build and run the tests, you'll need the following software installed on your computer:
+
+* git
+* Base development tools (for installing certain development gems)
+* Ruby (with development headers)
+* Bundler (optional, but recommended)
+* pdftocairo (required for visual tests)
+
+The test suite relies on additional software to analyze and assert the behavior of Asciidoctor PDF.
+Therefore, these prerequisites are more extensive than what's needed for using Asciidoctor PDF alone.
+
+If you're running a Debian-based Linux distribution, you can install the required software using the following command:
+
+ $ sudo apt-get install -y build-essential git ruby-dev ruby-bundler poppler-utils
+
+If you're running a Fedora-based Linux distribution, you can install the required software using the following command:
+
+ $ sudo dnf group install -y "Development Tools"
+   sudo dnf install -y redhat-rpm-config ruby-devel rubygem-bundler poppler-utils
+
+If you want to run the tests on Fedora without using Bundler, install these dependencies instead:
+
+ $ sudo dnf install -y ruby rubygem-asciidoctor rubygem-chunky_png rubygem-coderay rubygem-pdf-inspector \
+   rubygem-prawn rubygem-prawn-icon rubygem-prawn-svg rubygem-prawn-table rubygem-prawn-templates \
+   rubygem-rouge rubygem-rspec rubygem-treetop poppler-utils
+
+You can study the CI workflow at [.path]_.github/workflows/ci.yml_ to learn more about what software is needed to run the full test suite.
 
 === Retrieve the Source Code
 
@@ -53,7 +88,7 @@ You can retrieve the source of {project-name} in one of two ways:
 
 ==== Option 1: Fetch Using Git
 
-If you want to clone the git repository, simply copy the {url-project-repo}[GitHub repository URL] and pass it to the `git clone` command:
+If you want to clone the git repository, copy the {url-project-repo}[GitHub repository URL] and pass it to the `git clone` command:
 
  $ git clone https://github.com/asciidoctor/asciidoctor-pdf
 
@@ -66,7 +101,7 @@ Next, change to the project directory:
 If you want to download a zip archive, click the btn:[Download Zip] button on the right-hand side of the repository page on GitHub.
 Once the download finishes, extract the archive, open a console and change to that directory.
 
-TIP: Instead of working out of the {project-handle} directory, you can simply add the absolute path of the [path]_bin_ directory to your `PATH` environment variable.
+TIP: Instead of working out of the {project-handle} directory, you can add the absolute path of the [path]_bin_ directory to your `PATH` environment variable.
 
 We'll leverage the project configuration to install the necessary dependencies.
 
@@ -74,33 +109,40 @@ We'll leverage the project configuration to install the necessary dependencies.
 
 We recommend using {url-rvm}[RVM] to manage the installation of Ruby you'll use to build and develop the project.
 
- $ rvm use 2.6
+ $ rvm use 3.1
 
 The dependencies needed to use {project-name} are defined in the [.path]_Gemfile_ at the root of the project.
-We can use Bundler to install the dependencies for us.
+You can use Bundler to install the dependencies listed there.
 
 To check you have Bundler available, use the `bundle` command to query the installed version:
 
- $ bundle --version
+ $ bundle version
 
-If it's not installed, use the `gem` command to install it.
+If the `bundle` command is not available, use the `gem` command to install it.
 
  $ gem install bundler
 
-Then use the `bundle` command with the `--path` option to install the project dependencies into the project:
+Now configure Bundler to install the project dependencies within the project and run it:
 
- $ bundle --path=.bundle/gems
+ $ bundle config --local path .bundle/gems
+   bundle
 
 NOTE: You must call `bundle` from the project directory so that it can find the [.path]_Gemfile_.
 
 === Run the Tests
 
 Tests are written using RSpec.
-To run the tests, simply invoke rspec via bundler.
+To run the tests, invoke rspec via bundler.
 
  $ bundle exec rspec
 
-To disable the visual integration tests, pass the `` option:
+TIP: If you're using Ruby 2.7, you may have to turn off deprecation warnings using `export RUBYOPT='-W:no-deprecated'` in order for all of the tests to pass.
+
+To disable tests that access the network, pass the `-t ~network` option:
+
+ $ bundle exec rspec -t ~network
+
+Similarly, to disable the visual integration tests, pass the `-t ~visual` option:
 
  $ bundle exec rspec -t ~visual
 
@@ -191,7 +233,7 @@ Now you can run the application as modified by the PR:
 
  $ bundle exec asciidoctor-pdf /path/to/sample.adoc
 
-To switch back to main just type:
+To switch back to main type:
 
  $ git checkout main
 
@@ -227,6 +269,21 @@ or
  $ ./.bundle/.bin/asciidoctor-pdf input.adoc
 
 These instructions work for testing any development version of {project-name} directly from GitHub.
+
+=== Run the Code Linter
+
+Before you commit code, you should run it through the linter to make sure it adheres to the coding style.
+You can run the linter using the following command:
+
+ $ bundle exec rake lint
+
+The coding style is enforced by https://rubocop.org/[RuboCop].
+The rules are defined in [.path]_.rubocop.yml_.
+These rules extend from the default rule set to match the style of the project.
+
+In additional to those rules, the following rules are enforced manually:
+
+* use tap/each instead of each_with_object to build a new Hash from an enumerable object
 
 === Generate Code Coverage Report
 
@@ -279,4 +336,5 @@ Use the following command to regenerate the parser:
 
  bundle exec tt lib/asciidoctor/pdf/formatted_text/parser.treetop
 
-You then need to commit both files.
+Then look for any places that a type is mixed into an object multiple times and remove the duplicate.
+Finally, you then need to commit both files.

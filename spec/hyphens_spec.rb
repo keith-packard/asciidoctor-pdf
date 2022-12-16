@@ -2,7 +2,8 @@
 
 require_relative 'spec_helper'
 
-describe 'Asciidoctor::PDF::Converter - Hyphens' do
+# NOTE: text-hyphen may not be available when building RPM, so check for it
+describe 'Asciidoctor::PDF::Converter - Hyphens', if: (RSpec::ExampleGroupHelpers.gem_available? 'text-hyphen'), &(proc do
   it 'should hyphenate text in paragraph if hyphens attribute is set' do
     pdf = to_pdf <<~'EOS', analyze: true
     :hyphens:
@@ -14,6 +15,33 @@ describe 'Asciidoctor::PDF::Converter - Hyphens' do
     (expect lines).to have_size 2
     (expect lines[0]).to end_with ?\u00ad
     (expect lines[0].count ?\u00ad).to be 1
+
+    (expect defined? Text::Hyphen).to be_truthy
+  end
+
+  it 'should hyphenate text in paragraph if base-hyphens key in theme is set to truthy value' do
+    [true, ''].each do |base_hyphens|
+      pdf = to_pdf <<~'EOS', pdf_theme: { base_hyphens: base_hyphens }, analyze: true
+      This story chronicles the inexplicable hazards and vicious beasts a team must conquer and vanquish.
+      EOS
+
+      lines = pdf.lines
+      (expect lines).to have_size 2
+      (expect lines[0]).to end_with ?\u00ad
+      (expect lines[0].count ?\u00ad).to be 1
+    end
+  end
+
+  it 'should not hyphenate text in paragraph if base-hyphens key in theme is set but hyphens attribute is unset' do
+    pdf = to_pdf <<~'EOS', pdf_theme: { base_hyphens: '' }, analyze: true
+    :!hyphens:
+
+    This story chronicles the inexplicable hazards and vicious beasts a team must conquer and vanquish.
+    EOS
+
+    lines = pdf.lines
+    (expect lines).to have_size 2
+    (expect lines.join ?\n).not_to include ?\u00ad
   end
 
   it 'should hyphenate text split across multiple lines' do
@@ -38,7 +66,43 @@ describe 'Asciidoctor::PDF::Converter - Hyphens' do
     (expect pdf.lines[0]).to end_with '-'
   end
 
-  it 'should hyphenate text in table cell if hyphens attribute is set' do
+  it 'should honor hyphenation exceptions when word is adjacent to a non-word character' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    :hyphens:
+    :lang: nl
+
+    [width=15%]
+    |===
+    | souveniertjes!
+    |===
+    EOS
+
+    (expect pdf.lines).to eql [%(souve\u00ad), 'niertjes!']
+
+    converter = Asciidoctor::Converter.create 'pdf'
+    result = converter.hyphenate_words 'souveniertjes!', (Text::Hyphen.new language: 'nl')
+    (expect result).to eql %(sou\u00adve\u00adniertjes!)
+  end
+
+  it 'should hyphenate text in table cell in table head if hyphens attribute is set' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    :hyphens:
+    :pdf-page-size: A7
+
+    [%header]
+    |===
+    |This story chronicles the inexplicable hazards and tremendously vicious beasts the team must conquer and vanquish.
+    |===
+    EOS
+
+    lines = pdf.lines
+    (expect lines.size).to be > 2
+    (expect lines[0]).to end_with ?\u00ad
+    (expect lines[1]).to end_with ?\u00ad
+    (expect pdf.text[0][:font_name]).to eql 'NotoSerif-Bold'
+  end
+
+  it 'should hyphenate text in table cell in table body if hyphens attribute is set' do
     pdf = to_pdf <<~'EOS', analyze: true
     :hyphens:
 
@@ -134,12 +198,16 @@ describe 'Asciidoctor::PDF::Converter - Hyphens' do
   end
 
   it 'should apply hyphenation when line is advanced to next page' do
-    pdf = to_pdf <<~'EOS', pdf_theme: { prose_margin_top: 700 }, analyze: true
-    = Document Title
-    :hyphens:
+    pdf = with_content_spacer 10, 690 do |spacer_path|
+      to_pdf <<~EOS, analyze: true
+      = Document Title
+      :hyphens:
 
-    foobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobar paragraph
-    EOS
+      image::#{spacer_path}[]
+
+      foobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobarfoobar paragraph
+      EOS
+    end
 
     lines = pdf.lines pdf.find_text page_number: 2
     (expect lines).to have_size 2
@@ -156,4 +224,4 @@ describe 'Asciidoctor::PDF::Converter - Hyphens' do
 
     (expect to_file).to visually_match 'hyphens-word-break.pdf'
   end
-end unless (Gem::Specification.stubs_for 'text-hyphen').empty?
+end)

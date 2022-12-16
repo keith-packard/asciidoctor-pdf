@@ -2,7 +2,7 @@
 
 require_relative 'spec_helper'
 
-describe 'Asciidoctor::PDF::Optimizer' do
+describe 'Asciidoctor::PDF::Optimizer', if: (RSpec::ExampleGroupHelpers.gem_available? 'rghost') && (RSpec::ExampleGroupHelpers.gem_available? 'rouge'), &(proc do
   it 'should optimize output file if optimize attribute is set' do
     input_file = Pathname.new example_file 'basic-example.adoc'
     to_file = to_pdf_file input_file, 'optimizer-not-optimized.pdf'
@@ -23,6 +23,16 @@ describe 'Asciidoctor::PDF::Optimizer' do
     optimizer = Asciidoctor::PDF::Optimizer.new
     (expect optimizer.quality).to eql :default
     (expect optimizer.compatibility_level).to eql '1.4'
+    (expect optimizer.compliance).to eql 'PDF'
+  end
+
+  it 'should not mangle internal links when optimizing PDF' do
+    input_file = Pathname.new fixture_file 'chronicles-abbreviated.adoc'
+    to_optimized_file = to_pdf_file input_file, 'chronicles-abbreviated.pdf', attribute_overrides: { 'optimize' => '' }
+    pdf = PDF::Reader.new to_optimized_file
+    toc_annotations = get_annotations pdf, 2
+    toc_annotations_with_dest = toc_annotations.select {|it| it[:Dest] }
+    (expect toc_annotations_with_dest).to have_size toc_annotations.size
   end
 
   it 'should generate optimized PDF when filename contains spaces' do
@@ -44,7 +54,7 @@ describe 'Asciidoctor::PDF::Optimizer' do
   it 'should use existing pdfmark file if present when optimizing' do
     input_file = Pathname.new example_file 'basic-example.adoc'
     pdfmark_file = Pathname.new output_file 'optimizer-pdfmark.pdfmark'
-    pdfmark_file.write <<~EOS
+    pdfmark_file.write <<~'EOS'
     [ /Title (All Your PDF Are Belong To Us)
       /Author (CATS)
       /Subject (Zero Wing)
@@ -86,6 +96,40 @@ describe 'Asciidoctor::PDF::Optimizer' do
     end).to not_raise_exception
   end
 
+  it 'should generate PDF that conforms to specified compliance' do
+    input_file = Pathname.new example_file 'basic-example.adoc'
+    to_file = to_pdf_file input_file, 'optimizer-screen-pdf-a.pdf', attribute_overrides: { 'optimize' => 'PDF/A' }
+    pdf = PDF::Reader.new to_file
+    (expect pdf.pdf_version).to eql 1.4
+    (expect pdf.pages).to have_size 1
+    # Non-printing annotations (i.e., hyperlinks) are not permitted in PDF/A
+    (expect get_annotations pdf, 1).to be_empty
+  end
+
+  # NOTE: I can't figure out a way to capture the stderr in this case without using the CLI
+  it 'should not fail to produce PDF/X compliant document if specified', cli: true do
+    out, err, res = run_command asciidoctor_pdf_bin, '-a', 'optimize=PDF/X', '-o', (to_file = output_file 'optimizer-screen-pdf-x.pdf'), (example_file 'basic-example.adoc')
+    (expect res.exitstatus).to be 0
+    (expect out).to be_empty
+    (expect err).not_to include 'TrimBox does not fit inside BleedBox'
+    (expect err).to be_empty
+    pdf = PDF::Reader.new to_file
+    (expect pdf.pdf_version).to eql 1.3
+    (expect pdf.pages).to have_size 1
+    # Non-printing annotations (i.e., hyperlinks) are not permitted in PDF/X
+    (expect get_annotations pdf, 1).to be_empty
+  end
+
+  it 'should generate PDF that conforms to specified PDF/A compliance when quality is specified' do
+    input_file = Pathname.new example_file 'basic-example.adoc'
+    to_file = to_pdf_file input_file, 'optimizer-print-pdf-a.pdf', attribute_overrides: { 'optimize' => 'print,PDF/A' }
+    pdf = PDF::Reader.new to_file
+    (expect pdf.pdf_version).to eql 1.4
+    (expect pdf.pages).to have_size 1
+    # Non-printing annotations (i.e., hyperlinks) are not permitted in PDF/A
+    (expect get_annotations pdf, 1).to be_empty
+  end
+
   it 'should install bin script named asciidoctor-pdf-optimize' do
     bin_script = (Pathname.new Gem.bindir) / 'asciidoctor-pdf-optimize'
     bin_script = Pathname.new Gem.bin_path 'asciidoctor-pdf', 'asciidoctor-pdf-optimize' unless bin_script.exist?
@@ -125,4 +169,4 @@ describe 'Asciidoctor::PDF::Optimizer' do
     pdf_info = (PDF::Reader.new to_file).info
     (expect pdf_info[:Producer]).to include 'Ghostscript'
   end
-end if ENV['RGHOST_VERSION']
+end)

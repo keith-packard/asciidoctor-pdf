@@ -10,6 +10,12 @@ module Asciidoctor
       WordRx = /\p{Word}+/
       Hyphen = '-'
       SoftHyphen = ?\u00ad
+      LowerAlphaChars = 'a-z'
+      # NOTE: use more widely-supported ғ instead of ꜰ as replacement for F
+      # NOTE: use more widely-supported ǫ instead of ꞯ as replacement for Q
+      # NOTE: use more widely-supported s (lowercase latin "s") instead of ꜱ as replacement for S
+      # NOTE: in small caps, x (lowercase latin "x") remains unchanged
+      SmallCapsChars = 'ᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴoᴘǫʀsᴛᴜᴠᴡxʏᴢ'
 
       def capitalize_words_pcdata string
         if XMLMarkupRx.match? string
@@ -48,6 +54,37 @@ module Asciidoctor
           string.gsub(PCDATAFilterRx) { $2 ? $2.upcase : $1 }
         else
           string.upcase
+        end
+      end
+
+      def smallcaps_pcdata string
+        if XMLMarkupRx.match? string
+          string.gsub(PCDATAFilterRx) { $2 ? ($2.tr LowerAlphaChars, SmallCapsChars) : $1 }
+        else
+          string.tr LowerAlphaChars, SmallCapsChars
+        end
+      end
+
+      # Apply the text transform to the specified text.
+      #
+      # Supported transform values are "uppercase", "lowercase", or "none" (passed
+      # as either a String or a Symbol). When the uppercase transform is applied to
+      # the text, it correctly uppercases visible text while leaving markup and
+      # named character entities unchanged. The none transform returns the text
+      # unmodified.
+      #
+      def transform_text text, transform
+        case transform
+        when :uppercase, 'uppercase'
+          uppercase_pcdata text
+        when :lowercase, 'lowercase'
+          lowercase_pcdata text
+        when :capitalize, 'capitalize'
+          capitalize_words_pcdata text
+        when :smallcaps, 'smallcaps'
+          smallcaps_pcdata text
+        else
+          text
         end
       end
     end

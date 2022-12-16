@@ -30,6 +30,43 @@ describe 'Asciidoctor::PDF::Converter - Outline' do
       (expect pdf.catalog[:NonFullScreenPageMode]).to eql :UseOutlines
     end
 
+    it 'should not create outline if the outline document attribute is unset in document' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+      :doctype: book
+      :!outline:
+
+      == First Chapter
+
+      === Chapter Section
+
+      == Middle Chapter
+
+      == Last Chapter
+      EOS
+
+      outline = extract_outline pdf
+      (expect outline).to be_empty
+    end
+
+    it 'should not create outline if the outline document attribute is unset via API' do
+      pdf = to_pdf <<~'EOS', attribute_overrides: { 'outline' => nil }
+      = Document Title
+      :doctype: book
+
+      == First Chapter
+
+      === Chapter Section
+
+      == Middle Chapter
+
+      == Last Chapter
+      EOS
+
+      outline = extract_outline pdf
+      (expect outline).to be_empty
+    end
+
     it 'should create an outline to navigate the document structure' do
       pdf = to_pdf <<~'EOS'
       = Document Title
@@ -145,7 +182,7 @@ describe 'Asciidoctor::PDF::Converter - Outline' do
       (expect outline[1][:children]).to be_empty
     end
 
-    it 'should allow outline depth to exceed toclevels of outlinelevels attribute is set' do
+    it 'should allow outline depth to exceed toclevels if outlinelevels attribute is set' do
       pdf = to_pdf <<~'EOS'
       = Document Title
       :doctype: book
@@ -194,6 +231,76 @@ describe 'Asciidoctor::PDF::Converter - Outline' do
       (expect outline).to have_size 4
       (expect outline[1][:title]).to eql 'First Chapter'
       (expect outline[1][:children]).to be_empty
+    end
+
+    it 'should limit outline depth per section if value of outlinelevels attribute is specified on section' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+      :doctype: book
+
+      == First Chapter
+
+      [outlinelevels=2]
+      === Chapter Section
+
+      ==== Nested Section
+
+      == Middle Chapter
+
+      == Last Chapter
+      EOS
+
+      outline = extract_outline pdf
+      (expect outline).to have_size 4
+      (expect outline[1][:title]).to eql 'First Chapter'
+      (expect outline[1][:children]).not_to be_empty
+      first_chapter_children = outline[1][:children]
+      (expect first_chapter_children).to have_size 1
+      chapter_section = first_chapter_children[0]
+      (expect chapter_section[:title]).to eql 'Chapter Section'
+      (expect chapter_section[:children]).to be_empty
+    end
+
+    it 'should not include parts in outline if outlinelevels is less than 0' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+      :doctype: book
+      :outlinelevels: -1
+
+      = Part A
+
+      == Chapter A
+
+      = Part B
+
+      == Chapter B
+      EOS
+
+      outline = extract_outline pdf
+      (expect outline).to have_size 1
+      (expect outline[0][:title]).to eql 'Document Title'
+      (expect outline[0][:children]).to be_empty
+    end
+
+    it 'should not include chapters in outline if outlinelevels is 0' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+      :doctype: book
+      :outlinelevels: 0
+
+      == Chapter A
+
+      === Topic A
+
+      == Chapter B
+
+      === Topic B
+      EOS
+
+      outline = extract_outline pdf
+      (expect outline).to have_size 1
+      (expect outline[0][:title]).to eql 'Document Title'
+      (expect outline[0][:children]).to be_empty
     end
 
     it 'should use second argument of outlinelevels attribute to control depth at which outline is expanded' do
@@ -250,10 +357,70 @@ describe 'Asciidoctor::PDF::Converter - Outline' do
       (expect outline[1][:children][0][:title]).to eql 'Chapter'
       (expect outline[1][:children][0][:closed]).to be true
     end
+
+    it 'should use default toclevels for outline level if only expand levels is specified' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+      :doctype: book
+      :outlinelevels: :1
+
+      = Part
+
+      == Chapter
+
+      === Section
+
+      ==== Subsection
+      EOS
+
+      outline = extract_outline pdf
+      (expect outline).to have_size 2
+      (expect outline[0][:title]).to eql 'Document Title'
+      (expect outline[0][:children]).to be_empty
+      (expect outline[1][:title]).to eql 'Part'
+      (expect outline[1][:closed]).to be false
+      (expect outline[1][:children]).to have_size 1
+      (expect outline[1][:children][0][:title]).to eql 'Chapter'
+      (expect outline[1][:children][0][:closed]).to be true
+      (expect outline[1][:children][0][:children]).to have_size 1
+      (expect outline[1][:children][0][:children][0][:title]).to eql 'Section'
+      (expect outline[1][:children][0][:children][0][:children]).to have_size 0
+    end
+
+    it 'should use value of toclevels for outline level if only expand levels is specified' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+      :doctype: book
+      :toclevels: 3
+      :outlinelevels: :1
+
+      = Part
+
+      == Chapter
+
+      === Section
+
+      ==== Subsection
+      EOS
+
+      outline = extract_outline pdf
+      (expect outline).to have_size 2
+      (expect outline[0][:title]).to eql 'Document Title'
+      (expect outline[0][:children]).to be_empty
+      (expect outline[1][:title]).to eql 'Part'
+      (expect outline[1][:closed]).to be false
+      (expect outline[1][:children]).to have_size 1
+      (expect outline[1][:children][0][:title]).to eql 'Chapter'
+      (expect outline[1][:children][0][:closed]).to be true
+      (expect outline[1][:children][0][:children]).to have_size 1
+      (expect outline[1][:children][0][:children][0][:title]).to eql 'Section'
+      (expect outline[1][:children][0][:children][0][:children]).to have_size 1
+      (expect outline[1][:children][0][:children][0][:children][0][:title]).to eql 'Subsection'
+    end
   end
 
   context 'Doctitle' do
-    it 'should include doctitle in outline for book if notitle attribute is set' do
+    it 'should include doctitle in outline for book even if notitle attribute is set' do
       pdf = to_pdf <<~'EOS'
       = Book Title
       :doctype: book
@@ -275,7 +442,7 @@ describe 'Asciidoctor::PDF::Converter - Outline' do
       (expect outline[0][:dest][:label]).to eql outline[1][:dest][:label]
     end
 
-    it 'should include doctitle in outline for article if title-page attribute is set' do
+    it 'should include doctitle in outline for article when title-page attribute is set' do
       pdf = to_pdf <<~'EOS'
       = Article Title
       :title-page:
@@ -320,7 +487,7 @@ describe 'Asciidoctor::PDF::Converter - Outline' do
       (expect outline[1][:dest][:label]).to eql '1'
     end
 
-    it 'should include doctitle in outline for article if notitle attribute is set' do
+    it 'should include doctitle in outline for article even if notitle attribute is set' do
       pdf = to_pdf <<~'EOS'
       = Article Title
       :notitle:
@@ -341,6 +508,45 @@ describe 'Asciidoctor::PDF::Converter - Outline' do
       (expect outline[1][:dest][:label]).to eql '1'
       (expect outline[0][:dest][:pagenum]).to eql outline[1][:dest][:pagenum]
       (expect outline[0][:dest][:label]).to eql outline[1][:dest][:label]
+    end
+
+    it 'should not include doctitle in outline if outline-title is unset' do
+      pdf = to_pdf <<~'EOS'
+      = Article Title
+      :outline-title!:
+
+      == Foo
+
+      == Bar
+      EOS
+
+      (expect pdf.pages).to have_size 1
+      outline = extract_outline pdf
+      (expect outline).to have_size 2
+      (expect outline[0][:title]).to eql 'Foo'
+      (expect outline[0][:dest][:pagenum]).to be 1
+      (expect outline[0][:dest][:label]).to eql '1'
+    end
+
+    it 'should allow title for document in outline to be customized using outline-title attribute' do
+      pdf = to_pdf <<~'EOS'
+      = Article Title
+      :outline-title: Outline
+
+      == Foo
+
+      == Bar
+      EOS
+
+      (expect pdf.pages).to have_size 1
+      outline = extract_outline pdf
+      (expect outline).to have_size 3
+      (expect outline[0][:title]).to eql 'Outline'
+      (expect outline[0][:dest][:pagenum]).to be 1
+      (expect outline[0][:dest][:label]).to eql '1'
+      (expect outline[1][:title]).to eql 'Foo'
+      (expect outline[1][:dest][:pagenum]).to be 1
+      (expect outline[1][:dest][:label]).to eql '1'
     end
 
     it 'should link doctitle dest to second page of article with front cover' do
@@ -411,7 +617,7 @@ describe 'Asciidoctor::PDF::Converter - Outline' do
       (expect outline[0][:children]).to be_empty
     end
 
-    it 'should set not set doctitle in outline if document has no doctitle, has sections, and untitled-label attribute is unset' do
+    it 'should not put doctitle in outline if document has no doctitle, has sections, and untitled-label attribute is unset' do
       pdf = to_pdf <<~'EOS'
       :untitled-label!:
 
@@ -434,6 +640,61 @@ describe 'Asciidoctor::PDF::Converter - Outline' do
       EOS
 
       (expect extract_outline pdf).to be_empty
+    end
+  end
+
+  context 'notitle section' do
+    it 'should add entry for visible section with notitle option' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+
+      == Section Present
+
+      content
+
+      [%notitle]
+      == Title for Outline
+
+      content
+      EOS
+
+      outline = extract_outline pdf
+      (expect outline[-1][:title]).to eql 'Title for Outline'
+      (expect (pdf.page 1).text).not_to include 'Title for Outline'
+    end
+
+    it 'should not add entry for section with no blocks' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+
+      == Section Present
+
+      content
+
+      [%notitle]
+      == Section Not Present
+      EOS
+
+      outline = extract_outline pdf
+      (expect outline[-1][:title]).to eql 'Section Present'
+    end
+
+    it 'should not add entry for section on page which has been deleted' do
+      pdf = to_pdf <<~'EOS'
+      = Document Title
+
+      == Section Present
+
+      content
+
+      <<<
+
+      [%notitle]
+      == Section Not Present
+      EOS
+
+      outline = extract_outline pdf
+      (expect outline[-1][:title]).to eql 'Section Present'
     end
   end
 
@@ -503,13 +764,27 @@ describe 'Asciidoctor::PDF::Converter - Outline' do
       = ACME(TM) Catalog <&#8470;&nbsp;1>
       :doctype: book
 
-      == Paper Clips &#x2116;&nbsp;4
+      == Paper Clips &#x20Ac;&nbsp;4
       EOS
 
       outline = extract_outline pdf
       (expect outline).to have_size 2
       (expect outline[0][:title]).to eql %(ACME\u2122 Catalog <\u2116 1>)
-      (expect outline[1][:title]).to eql %(Paper Clips \u2116 4)
+      (expect outline[1][:title]).to eql %(Paper Clips \u20ac 4)
+    end
+
+    it 'should sanitize value of custom outline title' do
+      pdf = to_pdf <<~'EOS'
+      = Article Title
+      :outline-title: Outline <&#8470;&nbsp;1>
+
+      == Section
+      EOS
+
+      (expect pdf.pages).to have_size 1
+      outline = extract_outline pdf
+      (expect outline).to have_size 2
+      (expect outline[0][:title]).to eql %(Outline <\u2116 1>)
     end
   end
 end

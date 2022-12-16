@@ -3,6 +3,48 @@
 require_relative 'spec_helper'
 
 describe 'Asciidoctor::PDF::Converter - Icon' do
+  it 'should display icon name if font-based icons are not enabled' do
+    pdf = to_pdf 'I icon:heart[] AsciiDoc.', analyze: true
+    (expect pdf.lines).to eql ['I [heart] AsciiDoc.']
+  end
+
+  it 'should read icon from image file when icons mode is image' do
+    (expect do
+      pdf = to_pdf <<~'EOS', analyze: :image
+      :icons:
+      :iconsdir: {imagesdir}
+
+      Look for files with the icon:logo[] icon.
+      EOS
+
+      images = pdf.images
+      (expect images).to have_size 1
+      (expect images[0][:width]).to eql 14.28
+      (expect images[0][:x]).to be > 48.24
+    end).to not_log_message
+  end
+
+  it 'should log warning if image file for icon not readable' do
+    input = <<~'EOS'
+    :icons:
+    :icontype: svg
+
+    I looked for icon:not-found[], but it was no where to be seen.
+    EOS
+    (expect do
+      pdf = to_pdf input, analyze: :image
+      images = pdf.images
+      (expect images).to be_empty
+    end).to log_message severity: :WARN, message: %(~image icon for 'not-found' not found or not readable: #{fixture_file 'icons/not-found.svg'})
+
+    (expect do
+      pdf = to_pdf input, analyze: true
+      lines = pdf.lines
+      (expect lines).to have_size 1
+      (expect lines[0]).to eql 'I looked for [not-found], but it was no where to be seen.'
+    end).to log_message
+  end
+
   it 'should use icon name from specified icon set' do
     pdf = to_pdf <<~'EOS', analyze: true
     :icons: font
@@ -61,6 +103,43 @@ describe 'Asciidoctor::PDF::Converter - Icon' do
     end).to log_message severity: :WARN, message: 'fas-wrench is not a valid icon name in the fab icon set'
   end
 
+  it 'should apply larger font size to icon if size is lg' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    :icons: font
+
+    If the icon:wrench[] doesn't do it, try a icon:wrench[lg] one.
+    EOS
+
+    wrench_texts = pdf.find_text ?\uf0ad
+    (expect wrench_texts).to have_size 2
+    (expect wrench_texts[0][:font_size]).to eql 10.5
+    (expect wrench_texts[0][:width]).to eql 10.5
+    (expect wrench_texts[1][:font_size].round 2).to eql 14.0
+    (expect wrench_texts[1][:width].round 2).to eql 14.0
+  end
+
+  it 'should apply specified custom font size to icon' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    :icons: font
+
+    I icon:fas-heart[1.2x] AsciiDoc
+    EOS
+
+    heart_text = pdf.find_unique_text ?\uf004
+    (expect heart_text[:font_size]).to eql 12.6
+  end
+
+  it 'should use inherited size if font size is 1x' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    :icons: font
+
+    I icon:fas-heart[1x] AsciiDoc
+    EOS
+
+    heart_text = pdf.find_unique_text ?\uf004
+    (expect heart_text[:font_size]).to eql pdf.text[0][:font_size]
+  end
+
   it 'should reserve 1em of space for fw icon' do
     pdf = to_pdf <<~'EOS', analyze: true
     :icons: font
@@ -68,7 +147,7 @@ describe 'Asciidoctor::PDF::Converter - Icon' do
 
     *|* icon:arrows-alt-h[fw] *|* icon:arrows-alt-v[fw] *|*
     EOS
-    guide_text = pdf.find_text string: '|', font_name: 'NotoSerif-Bold'
+    guide_text = pdf.find_text '|', font_name: 'NotoSerif-Bold'
     first_icon_gap = (guide_text[1][:x] - guide_text[0][:x]).round 2
     second_icon_gap = (guide_text[2][:x] - guide_text[1][:x]).round 2
     (expect first_icon_gap).to eql second_icon_gap
@@ -127,6 +206,48 @@ describe 'Asciidoctor::PDF::Converter - Icon' do
       (expect wink_text).to have_size 1
       (expect wink_text[0][:font_name]).to eql 'FontAwesome5Free-Regular'
     end).to log_message severity: :INFO, message: 'smile-wink icon not found in deprecated fa icon set; using match found in far icon set instead', using_log_level: :INFO
+  end
+
+  it 'should apply link to icon if link attribute is set and font-based icons are enabled' do
+    input = <<~'EOS'
+    :icons: font
+
+    gem icon:download[link=https://rubygems.org/downloads/asciidoctor-pdf-1.5.4.gem, window=_blank]
+    EOS
+
+    pdf = to_pdf input
+    annotations = get_annotations pdf, 1
+    (expect annotations).to have_size 1
+    link_annotation = annotations[0]
+    (expect link_annotation[:Subtype]).to be :Link
+    (expect link_annotation[:A][:URI]).to eql 'https://rubygems.org/downloads/asciidoctor-pdf-1.5.4.gem'
+
+    pdf = to_pdf input, analyze: true
+    link_text = (pdf.find_text ?\uf019)[0]
+    (expect link_text).not_to be_nil
+    (expect link_text[:font_name]).to eql 'FontAwesome5Free-Solid'
+    (expect link_text[:font_color]).to eql '428BCA'
+    link_text[:font_size] -= 1.5 # box appox is a little off
+    (expect link_annotation).to annotate link_text
+  end
+
+  it 'should apply link to alt text if link attribute is set and font-based icons are not enabled' do
+    input = <<~'EOS'
+    gem icon:download[link=https://rubygems.org/downloads/asciidoctor-pdf-1.5.4.gem, window=_blank]
+    EOS
+
+    pdf = to_pdf input
+    annotations = get_annotations pdf, 1
+    (expect annotations).to have_size 1
+    link_annotation = annotations[0]
+    (expect link_annotation[:Subtype]).to be :Link
+    (expect link_annotation[:A][:URI]).to eql 'https://rubygems.org/downloads/asciidoctor-pdf-1.5.4.gem'
+
+    pdf = to_pdf input, analyze: true
+    link_text = (pdf.find_text '[download]')[0]
+    (expect link_text).not_to be_nil
+    (expect link_text[:font_color]).to eql '428BCA'
+    (expect link_annotation).to annotate link_text
   end
 
   it 'should apply styles from role to icon' do
