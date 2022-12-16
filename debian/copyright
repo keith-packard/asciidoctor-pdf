@@ -3,11 +3,12 @@ Upstream-Name: asciidoctor-pdf
 Source: https://github.com/asciidoctor/asciidoctor-pdf
 
 Files: *
-Copyright: 2014-2018 OpenDevise Inc. and the Asciidoctor Project
+Copyright: 2014-2022 OpenDevise Inc. and the Asciidoctor Project
 License: MIT
 
 Files: lib/asciidoctor/pdf/ext/prawn/coderay_encoder.rb
 Copyright: 2014 Felipe Doria
+           2014-2022 OpenDevise Inc. and the Asciidoctor Project
 License: MIT
 
 Files: lib/asciidoctor/pdf/roman_numeral.rb
