@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (2.3.4-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+
+ -- Lucas Kanashiro <kanashiro@debian.org>  Fri, 16 Dec 2022 14:27:38 -0300
+
 ruby-asciidoctor-pdf (1.6.2-1) unstable; urgency=medium
 
   * New upstream version.
