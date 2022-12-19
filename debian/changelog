@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (2.3.4-2) UNRELEASED; urgency=medium
+
+  * d/control: do not depend on ruby-safe-yaml (Closes: #1026107).
+
+ -- Lucas Kanashiro <kanashiro@debian.org>  Mon, 19 Dec 2022 16:47:34 -0300
+
 ruby-asciidoctor-pdf (2.3.4-1) unstable; urgency=medium
 
   * New upstream release (Closes: #1023765).
