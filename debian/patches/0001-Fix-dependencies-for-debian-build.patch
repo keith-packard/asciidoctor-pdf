@@ -2,8 +2,7 @@ From: Keith Packard <keithp@keithp.com>
 Date: Thu, 1 Nov 2018 13:21:05 -0700
 Subject: Fix dependencies for debian build.
 
-Removed prawn/templates, which eliminates the ability to use .pdf
-files as images.
+Leave prawn/templates enabled as the code now depends on it existing.
 
 Update gemspec dependencies to match debian packages
 
@@ -16,10 +15,15 @@ Signed-off-by: Keith Packard <keithp@keithp.com>
 Last-Updated: 2022-12-16
 Reviewed-By: Lucas Kanashiro <kanashiro@debian.org>
 Forwarded: not-needed
+---
+ asciidoctor-pdf.gemspec | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
 
+diff --git a/asciidoctor-pdf.gemspec b/asciidoctor-pdf.gemspec
+index ec356b9..046dba9 100644
 --- a/asciidoctor-pdf.gemspec
 +++ b/asciidoctor-pdf.gemspec
-@@ -35,11 +35,11 @@
+@@ -35,11 +35,11 @@ Gem::Specification.new do |s|
  
    s.add_runtime_dependency 'asciidoctor', '~> 2.0'
    s.add_runtime_dependency 'prawn', '~> 2.4.0'
@@ -27,21 +31,10 @@ Forwarded: not-needed
 +  # s.add_runtime_dependency 'matrix', '~> 0.4' # required until prawn >= 2.5.0 is released
    s.add_runtime_dependency 'prawn-table', '~> 0.2.0'
 -  s.add_runtime_dependency 'prawn-templates', '~> 0.1.0'
-+  # s.add_runtime_dependency 'prawn-templates', '~> 0.1.0'
++  s.add_runtime_dependency 'prawn-templates', '~> 0.1'
    s.add_runtime_dependency 'prawn-svg', '~> 0.32.0'
 -  s.add_runtime_dependency 'prawn-icon', '~> 3.0.0'
 +  s.add_runtime_dependency 'prawn-icon', '~> 3.0'
    s.add_runtime_dependency 'concurrent-ruby', '~> 1.1'
    s.add_runtime_dependency 'treetop', '~> 1.6.0'
  
---- a/lib/asciidoctor/pdf.rb
-+++ b/lib/asciidoctor/pdf.rb
-@@ -7,7 +7,7 @@
- require_relative 'pdf/version'
- require 'asciidoctor'
- require 'prawn'
--require 'prawn/templates'
-+# require 'prawn/templates'
- require_relative 'pdf/measurements'
- require_relative 'pdf/sanitizer'
- require_relative 'pdf/text_transformer'
