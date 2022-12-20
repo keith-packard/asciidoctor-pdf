@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (2.3.4-3) unstable; urgency=medium
+
+  * Re-enable ruby-prawn-templates. (Closes: #1026652, #1026700).
+
+ -- Keith Packard <keithp@keithp.com>  Tue, 20 Dec 2022 11:25:34 -0800
+
 ruby-asciidoctor-pdf (2.3.4-2) unstable; urgency=medium
 
   * d/control: do not depend on ruby-safe-yaml (Closes: #1026107).
