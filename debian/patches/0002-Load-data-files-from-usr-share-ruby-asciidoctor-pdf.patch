@@ -10,7 +10,7 @@ Signed-off-by: Keith Packard <keithp@keithp.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/lib/asciidoctor/pdf/theme_loader.rb b/lib/asciidoctor/pdf/theme_loader.rb
-index f4a600a..baf7a1e 100644
+index 30613aa..ad71b16 100644
 --- a/lib/asciidoctor/pdf/theme_loader.rb
 +++ b/lib/asciidoctor/pdf/theme_loader.rb
 @@ -9,7 +9,7 @@ class ThemeLoader
