@@ -1,3 +1,10 @@
+ruby-asciidoctor-pdf (2.3.19-1) unstable; urgency=medium
+
+  * Split into two packages.
+  * New upstream version.
+
+ -- Keith Packard <keithp@keithp.com>  Fri, 18 Jul 2025 17:50:20 +0200
+
 ruby-asciidoctor-pdf (2.3.4-3) unstable; urgency=medium
 
   * Re-enable ruby-prawn-templates. (Closes: #1026652, #1026700).

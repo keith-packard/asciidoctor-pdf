@@ -14,28 +14,28 @@ Build-Depends: debhelper-compat (= 13),
                ruby-prawn-svg (>= 0.32.0),
                ruby-prawn-table (>= 0.2.0),
                ruby-treetop (>= 1.6.0)
-Standards-Version: 4.6.0.1
+Standards-Version: 4.7.2
 Vcs-Git: https://salsa.debian.org/keithp/asciidoctor-pdf.git
 Vcs-Browser: https://salsa.debian.org/keithp/asciidoctor-pdf
 Homepage: https://github.com/asciidoctor/asciidoctor-pdf
 Testsuite: autopkgtest-pkg-ruby
-XS-Ruby-Versions: all
 Rules-Requires-Root: no
 
 Package: ruby-asciidoctor-pdf
 Architecture: all
-XB-Ruby-Versions: ${ruby:Versions}
 Depends: ruby (>= 1:2.5.1),
 	 ruby-asciidoctor (>= 2.0),
 	 ruby-concurrent (>= 1.1~),
 	 ruby-prawn (>= 2.4.0),
 	 ruby-prawn-templates (>= 0.1.2),
 	 ruby-prawn-icon (>= 3.0.0),
-	 ruby-prawn-svg (>= 0.32.0),
+	 ruby-prawn-svg (>= 0.34.0),
 	 ruby-prawn-table (>= 0.2.0),
    ruby-rghost (>= 0.9.9),
 	 ruby-treetop (>= 1.6.0),
-         ${misc:Depends}
+	 ruby-ttfunk (>= 1.7.0),
+   ${ruby:Depends},
+   ${misc:Depends}
 Suggests: ruby-rouge
 Description: Ruby module for converting AsciiDoc documents to PDF using Prawn
  A ruby module providing an extension for Asciidoctor that converts
