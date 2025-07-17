@@ -22,6 +22,29 @@ describe 'Asciidoctor::PDF::Converter - Running Content' do
       (expect text[0][:string]).to eql '1'
     end
 
+    it 'should add running content to empty page' do
+      pdf = to_pdf <<~'EOS', enable_footer: true
+      first page
+
+      <<<
+
+      [%always]
+      <<<
+
+      third page
+      EOS
+      (expect pdf.pages).to have_size 3
+      (expect pdf.pages[1].text).to eql '2'
+      pdf.pages.each do |page|
+        contents = pdf.objects[page.page_object[:Contents]].data
+        content_lines = contents.lines
+        before_fill_color = (content_lines.slice 0, content_lines.index {|it| it.end_with? %( scn\n) }).join
+        before_stroke_color = (content_lines.slice 0, content_lines.index {|it| it.end_with? %( SCN\n) }).join
+        (expect before_fill_color).to include %(\n/DeviceRGB cs\n)
+        (expect before_stroke_color).to include %(\n/DeviceRGB CS\n)
+      end
+    end
+
     it 'should start adding running content to page after imported page' do
       pdf = to_pdf <<~'EOS', enable_footer: true, analyze: true
       image::blue-letter.pdf[]
@@ -380,6 +403,27 @@ describe 'Asciidoctor::PDF::Converter - Running Content' do
       (expect pgnum_labels).to eql [nil, nil, '1', '2', '3']
     end
 
+    it 'should start running content at toc in body of book when start at is toc and macro toc is used' do
+      pdf = to_pdf <<~'EOS', pdf_theme: { running_content_start_at: 'toc' }, enable_footer: true, analyze: true
+      = Document Title
+      :doctype: book
+      :toc: macro
+
+      == First Chapter
+
+      toc::[]
+
+      == Second Chapter
+
+      == Third Chapter
+      EOS
+
+      pgnum_labels = (1.upto pdf.pages.size).each_with_object [] do |page_number, accum|
+        accum << ((pdf.find_text page_number: page_number, y: 14.263)[-1] || {})[:string]
+      end
+      (expect pgnum_labels.slice 0, 5).to eql [nil, nil, '2', '3', '4']
+    end
+
     it 'should start running content after toc in body of book when start at is after-toc and macro toc is used' do
       filler = (1..20).map {|it| %(== #{['Filler'] * 20 * ' '} #{it}\n\ncontent) }.join %(\n\n)
       pdf = to_pdf <<~EOS, pdf_theme: { running_content_start_at: 'after-toc' }, enable_footer: true, analyze: true
@@ -450,6 +494,34 @@ describe 'Asciidoctor::PDF::Converter - Running Content' do
         accum << ((pdf.find_text page_number: page_number, y: 14.263)[-1] || {})[:string]
       end
       (expect pgnum_labels.slice 0, 5).to eql [nil, nil, nil, nil, '1']
+    end
+
+    it 'should start running content and page numbering on recto page after toc when both start at keys are after-toc and macro toc is used' do
+      pdf = to_pdf <<~EOS, pdf_theme: { running_content_start_at: 'after-toc', page_numbering_start_at: 'after-toc' }, enable_footer: true, analyze: true
+      = Document Title
+      :doctype: book
+      :toc: macro
+      :media: prepress
+
+      [abstract]
+      .Abstract
+      Documentation is a distillation of many long adventures.
+
+      toc::[]
+
+      == First Chapter
+
+      == Second Chapter
+      EOS
+
+      first_chapter_page_text = (pdf.page 7)[:text]
+      (expect first_chapter_page_text).to have_size 2
+      (expect first_chapter_page_text[0][:string]).to eql 'First Chapter'
+      (expect first_chapter_page_text[1][:string]).to eql '1'
+      pgnum_labels = (1.upto pdf.pages.size).each_with_object [] do |page_number, accum|
+        accum << ((pdf.find_text page_number: page_number, y: 14.263)[-1] || {})[:string]
+      end
+      (expect pgnum_labels).to eql [nil, nil, nil, nil, nil, nil, '1', '2', '3']
     end
 
     it 'should start running content at title page if running_content_start_at key is title' do
@@ -733,6 +805,33 @@ describe 'Asciidoctor::PDF::Converter - Running Content' do
         accum << ((pdf.find_text page_number: page_number, y: 14.263)[-1] || {})[:string]
       end
       (expect pgnum_labels).to eql [nil, '1', '2', '3']
+    end
+
+    it 'should start page numbering at toc in body of book when start at is toc and toc macro is used' do
+      pdf = to_pdf <<~'EOS', enable_footer: true, pdf_theme: { page_numbering_start_at: 'toc' }, analyze: true
+      = Book Title
+      :doctype: book
+      :toc: macro
+
+      == Dedication
+
+      To the only person who gets me.
+
+      toc::[]
+
+      == Acknowledgements
+
+      Thanks all to all who made this possible!
+
+      == Chapter One
+
+      content
+      EOS
+
+      pgnum_labels = (1.upto pdf.pages.size).each_with_object [] do |page_number, accum|
+        accum << ((pdf.find_text page_number: page_number, y: 14.263)[-1] || {})[:string]
+      end
+      (expect pgnum_labels.slice 0, 5).to eql [nil, 'ii', '1', '2', '3']
     end
 
     it 'should start page numbering after toc in body of book when start at is after-toc and toc macro is used' do
@@ -2997,9 +3096,40 @@ describe 'Asciidoctor::PDF::Converter - Running Content' do
       (expect rects[1][:fill_color]).to eql '0000FF'
     end
 
+    it 'should support multiline content with image on line above or below text' do
+      expected_image_data = File.binread fixture_file 'square.jpg'
+      pdf_theme = {
+        __dir__: fixtures_dir,
+        page_margin: 36,
+        footer_height: 36,
+        footer_columns: '=100%',
+        footer_recto_center_content: %(above +\nimage:square.jpg[fit=line]),
+        footer_recto_right_content: nil,
+        footer_verso_center_content: %(image:square.jpg[fit=line] +\nbelow),
+        footer_verso_left_content: nil,
+      }
+
+      pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, enable_footer: true
+      recto
+
+      <<<
+
+      verso
+      EOS
+      images = get_images pdf
+      (expect images).to have_size 2
+      images.each do |image|
+        (expect image.data).to eql expected_image_data
+      end
+      (expect (get_images pdf, 1)).to have_size 1
+      (expect (get_images pdf, 2)).to have_size 1
+      (expect (pdf.page 1).text).to include 'above'
+      (expect (pdf.page 2).text).to include 'below'
+    end
+
     it 'should support data URI image', visual: true do
       image_data = File.binread fixture_file 'tux.png'
-      encoded_image_data = Base64.strict_encode64 image_data
+      encoded_image_data = [image_data].pack 'm0'
       image_url = %(data:image/png;base64,#{encoded_image_data})
       pdf_theme = {
         footer_columns: '>50% <50%',

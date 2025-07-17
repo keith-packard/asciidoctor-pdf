@@ -36,19 +36,48 @@ _Only applies to block images and xref:theme:block-images.adoc#fallback[is set i
 If the value ends in `%` (not recommended), it's assumed to be the percentage of the available content area width.
 If the width exceeds the content area width, the image is scaled down to the content area width.
 
+|fit
+|_(Inline image only)_
+If the value is `line`, the image will be scaled down proportionally, as necessary, to fit the height of a line of text.
+If the value is `none`, the image will never be scaled down to fit within the height of the content area.
+The `none` value should only be used as a workaround in cases when the converter is scaling the image when it shouldn't.
+
 |_unspecified_
 |If you don't specify one of the aforementioned width settings, the intrinsic width of the image is used (the px value is multiplied by 75% to convert to pt, assuming canvas is 96 dpi) unless the width exceeds the content area width, in which case the image is scaled down to the content area width.
 |===
 
 TIP: Images in running content and page background images also support the `fit` attribute when specified using the image macro.
+However, the acceptable values of the `fit` attribute in those cases differs from the acceptable values for an inline image.
 See xref:background-images.adoc[] for details.
 
 [#default]
 == Default sizing
 
-An image is always sized according to the explicit or intrinsic width, then its height is scaled proportionally.
-The height of the image is ignored by the PDF converter unless the height of the image exceeds the content height of the page.
-In this case, the image is scaled down to fit on a single page.
+An image is always sized based on the user-specified or intrinsic width (aka the resolved width), then its height is scaled proportionally.
+The computed height of the image is honored unless this value exceeds the height of the content area.
+In this case, the image is scaled down to fit within the content area.
+
+The height of the content area is typically the space between the top and bottom margins of the page.
+However, the content area in table cells is handled in two phases.
+
+=== Inline image sizing in table cells
+
+In tables, each cell is considered its own content area.
+That content area is computed based on how much space the content requires, though still limited to the space between the top and bottom margins of the page.
+Inline images in table cells are permitted to increase the height of the cell.
+However, there can be differences in how the image is sized in a normal cell compared to an AsciiDoc table cell.
+
+The calculation of the content's height in a normal table cell can be inaccurate, often impacted by the font used.
+When the table cell is rendered, its height is restricted to the computed height.
+This can impact the sizing of inline images in a normal table cell if `fit=line` is set on the image.
+If the computed height ends up being less than the line height, the image will be scaled down to fit.
+If you want to prevent the converter from attempting to scale down the height of the inline image in a normal table cell, don't use `fit=line` or set `fit=none` on the inline image.
+
+The content area of an AsciiDoc table cell is computed more accurately.
+// NOTE TO AUTHORS: This is because Asciidoctor PDF calculates the content height itself and does so accurately
+Thus, when you specify the `a` style on a table cell, the scaling of an inline image is true.
+An inline image will never be scaled down if it fits within the maximum available height of a single page.
+In this scenario, the `fit=line` attribute will work in the same way it does outside a table cell.
 
 [#pdfwidth]
 == pdfwidth attribute

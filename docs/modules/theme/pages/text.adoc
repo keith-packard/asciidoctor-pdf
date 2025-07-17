@@ -142,12 +142,72 @@ The `text-transform` key changes the case of the text.
 It accepts the following keywords:
 
 capitalize:: Transforms the first letter of each word to a capital letter.
-lowercase:: Transforms all the text to lower case letters.
+lowercase:: Transforms all the text to lowercase letters.
 none:: Clears an inherited value and no case transformation is applied to the text.
-smallcaps:: Replaces lowercase Latin letters with their small capital variant.
+smallcaps:: Replaces lowercase ASCII letters (a-z) with their small capital variant.
+Lowercase letters outside the ASCII range are not transformed.
 uppercase:: Transforms all the text to capital letters.
 
-The `text-transform` key can’t be set on the xref:base.adoc[base category].
+The `text-transform` key can't be set on the xref:base.adoc[base category].
+
+If you want the smallcaps transformation to support letters beyond the a-z range, you can do so by overridding the `smallcaps` method in an extended converter.
+
+[,ruby]
+----
+class MyPDFConverter < (Asciidoctor::Converter.for 'pdf')
+  register_for 'pdf'
+  
+  def smallcaps string
+    string = super
+    string = string.gsub 'é', %(\u1d07\u0301)
+    string
+  end
+end
+----
+
+This transformation can be automated using `String#unicode_normalize` with the `:nfd` form.
+This method will rewrite all characters with diacritical marks so that the diacritical mark is added using a combining character (i.e., a two graphene form).
+
+[,ruby]
+----
+class MyPDFConverter < (Asciidoctor::Converter.for 'pdf')
+  register_for 'pdf'
+  
+  def smallcaps string
+    string = string.unicode_normalize :nfd unless string.ascii_only?
+    super
+  end
+end
+----
+
+The smallcaps transformation for extended Latin characters (e.g., characters that include an accent) typically requires the addition of a combining character, such as the combining acute accent in the example above).
+Therefore, you must ensure that the font you're using supports these combining characters (meaning it provides the necessary glyphs).
+
+[#superscript]
+== Superscript
+
+Text formatted as superscript, which includes footnote number references in the body, are displayed in a smaller font size (58.3%) and raised above the baseline (offset by 85% of the ascender height).
+It's not currently possible to influence the font size and text position of superscript text using the theme.
+These settings are hardcoded into Asciidoctor PDF and Prawn, respectively.
+However, you can adjust them in a Prawn patch by requiring the following Ruby script:
+
+[,ruby]
+----
+Prawn::Text::Formatted::Arranger.prepend (Module.new do
+  def initialize(*)
+    super
+    @sub_and_sup_relative_size = 0.75
+  end
+end)
+
+Prawn::Text::Formatted::Fragment.prepend (Module.new do
+  def y_offset
+    superscript? ? 0.5 * ascender : super
+  end
+end)
+----
+
+Adjust the relative size and y offset values as you see fit.
 
 [#border-background-color]
 == Border and background color 

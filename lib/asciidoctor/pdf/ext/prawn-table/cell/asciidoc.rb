@@ -12,6 +12,7 @@ module Prawn
 
         def initialize pdf, opts = {}
           @font_options = {}
+          @align = @valign = @root_font_size = nil
           super pdf, [], opts
         end
 
@@ -41,14 +42,12 @@ module Prawn
           apply_font_properties do
             extent = @pdf.dry_run keep_together: true, single_page: true do
               push_scratch parent_doc
-              doc.catalog[:footnotes] = parent_doc.catalog[:footnotes]
               # NOTE: we should be able to use cell.max_width, but returns 0 in some conditions (like when colspan > 1)
               indent cell.padding_left, bounds.width - cell.width + cell.padding_right do
                 move_down padding_y if padding_y > 0
                 conceal_page_top { traverse cell.content }
               end
               pop_scratch parent_doc
-              doc.catalog[:footnotes] = parent_doc.catalog[:footnotes]
             end
           end
           # NOTE: prawn-table doesn't support cells that exceed the height of a single page
@@ -74,9 +73,8 @@ module Prawn
           end
           # NOTE: draw_bounded_content automatically adds FPTolerance to width and height
           pdf.bounds.instance_variable_set :@width, spanned_content_width
-          padding_adjustment = content.context == :document ? padding_bottom : 0
-          # NOTE: we've already reserved the space, so just let the box stretch to bottom of the content area
-          pdf.bounds.instance_variable_set :@height, (pdf.y - pdf.page.margins[:bottom] - padding_adjustment)
+          # NOTE: we've already reserved the space, so just let the box stretch to the maximum that could fit on a page
+          pdf.bounds.instance_variable_set :@height, (pdf.margin_box.height - padding_top - padding_bottom)
           if @valign != :top && (excess_y = spanned_content_height - natural_content_height) > 0
             # QUESTION: could this cause a unexpected page overrun?
             pdf.move_down(@valign == :center ? (excess_y.fdiv 2) : excess_y)
@@ -89,6 +87,8 @@ module Prawn
           #   end
           # end
           start_page = pdf.page_number
+          parent_doc = (doc = content.document).nested? ? doc.parent_document : doc
+          doc.catalog[:footnotes] = parent_doc.catalog[:footnotes]
           # TODO: apply horizontal alignment; currently it is necessary to specify alignment on content blocks
           apply_font_properties { pdf.traverse content }
           if (extra_pages = pdf.page_number - start_page) > 0
@@ -115,11 +115,16 @@ module Prawn
             font_size = font_info[:size]
           end
           font_style ||= font_info[:style]
+          if (@align == :center || @align == :right) && content.blocks.map(&:context).uniq == [:paragraph]
+            prev_text_align = pdf.instance_variable_get :@base_text_align
+            pdf.instance_variable_set :@base_text_align, @align
+          end
           pdf.font font_family, size: font_size, style: font_style do
             yield
           ensure
             pdf.font_color = prev_font_color if prev_font_color
             pdf.font_scale = prev_font_scale if prev_font_scale
+            pdf.instance_variable_set :@base_text_align, prev_text_align if prev_text_align
           end
         end
       end

@@ -34,19 +34,26 @@ running-content:
 
 The `start-at` key accepts the following keywords or an integer:
 
-after-toc:: The running content starts after the TOC, no matter where the TOC is placed in the document.
-The `after-toc` value is only recognized if the title page is implicitly or explicitly enabled.
+after-toc:: The running content starts after the last page of the TOC, no matter where the TOC is placed in the document.
+If `media=prepress`, this keyword refers to the next recto page after the last page of the TOC.
+The `after-toc` value is primarily intended to be used with the book doctype, though it can be used with the article doctype if the title page is enabled.
+If the TOC is not enabled, or the title page for an article is not enabled, this value reverts to `body`.
+
 body:: This is the default value.
-The running content starts on the first page of the document body, which is typically the first page after the TOC if the TOC is in its default location.
+The running content starts on the first page of the document body.
+If the TOC is enabled in its default location, the first page of the document body is the next recto page after the TOC when `media=prepress` or the page that immediately follows the TOC otherwise.
+
 title:: The running content starts on the title page.
 The `title` value is only recognized if the title page is implicitly or explicitly enabled.
-toc:: The running content starts on the first page of the TOC.
-The `toc` value only applies if the TOC is in the default location (before the first page of the body).
-If the value is `toc`, and the toc macro is used to position the TOC, the `start-at` behavior is the same as if the TOC is not enabled.
-The `toc` value is only recognized if the title page is implicitly or explicitly enabled.
+
+toc:: The running content starts on the first page of the TOC, no matter where the TOC is placed in the document.
+The `toc` value is primarily intended to be used with the book doctype, though it can be used with the article doctype if the title page is enabled.
+If the TOC is not enabled, or the title page for an article is not enabled, this value reverts to `body`.
+
 [[page]]Integer:: The running content starts on the page that matches the number assigned to `start-at` (i.e., 1 is the first body page, 2 is the second body page).
+Refer to the `body` value for an explanation of where the body starts.
 For a prepress book (`doctype=book` and `media=prepress`), the running content starts on the empty verso page before the body if the value is `0`.
-When an integer is assigned to `start-at`, the title page doesn't need to be enabled.
+An integer value is recognized by all doctypes and the title page doesn't need to be enabled.
 
 TIP: To turn off the running content on TOC pages inserted by the toc macro, set the `noheader` or `nofooter` options on the macro (e.g., `toc::[opts=nofooter]`).
 
@@ -171,10 +178,16 @@ One exception to this rule are inline images, which are described in the next se
 
 == Add an image
 
-You can add an image to the running header or footer using the AsciiDoc inline image syntax.
+You can add images to the running header or footer using the AsciiDoc inline image syntax.
 The image target is resolved relative to the value of the `pdf-themesdir` attribute.
-If the image macro is the whole value for a column position, you can use the `position` and `fit` attributes to align and scale it relative to the column box.
-Otherwise, the image is treated like a normal inline image, for which you can only adjust the width.
+
+If the image macro is the entire value of the content for a given position, it acts like a background image.
+That means you can use the `fit` attribute scale it relative to the column's box.
+The `position` and `align` attributes on the macro aren't currently recognized.
+Rather, the horizontal position is controlled by the alignment of the column and the vertical position is controlled by the `image-vertical-align` key on the periphery.
+
+If the image macro is adjacent to other text, the image behaves just like any other inline image.
+In this case, you can only adjust the width of the image using the `width` attribute (e.g., `width=16`) or the `fit=line` attribute.
 
 Here's an example of how to use an image in the running header (which also applies for the footer).
 
@@ -219,3 +232,31 @@ footer:
 ----
 
 If you define running header and footer content in your theme (including the height), you can still disable this content per document by setting the `noheader` and `nofooter` attributes in the AsciiDoc document header, respectively.
+
+[,asciidoc]
+----
+= Document Title
+:noheader:
+:nofooter:
+
+No running content in this document.
+----
+
+If you want to disable the header and footer on pages in the TOC that were added using the toc macro, you can do so by setting the `noheader` and/or `nofooter` options on the toc macro.
+
+[,asciidoc]
+----
+= Document Title
+:doctype: book
+:toc: macro
+
+[dedication]
+== Dedication
+
+Credit where credit is due.
+
+[%noheader%nofooter]
+toc::[]
+
+== First Chapter
+----

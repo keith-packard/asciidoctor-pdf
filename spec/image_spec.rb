@@ -43,7 +43,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
 
   it 'should not crash if doctitle contains inline image with data URI target' do
     image_data = File.binread fixture_file 'square.jpg'
-    encoded_image_data = Base64.strict_encode64 image_data
+    encoded_image_data = [image_data].pack 'm0'
     pdf = to_pdf <<~EOS, analyze: :image
     = Document Title image:data:image/jpg;base64,#{encoded_image_data}[]
 
@@ -134,6 +134,24 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       EOS
 
       (expect to_file).to visually_match 'image-wolpertinger.pdf'
+    end
+
+    it 'should resolve target of block image if imagesdir is absolute directory with non-ASCII characters' do
+      pdf = to_pdf <<~'EOS', analyze: :image, attribute_overrides: { 'imagesdir' => (File.join fixtures_dir, %(\u6d4b\u8bd5)) }
+      image::square.png[pdfwidth=1in]
+      EOS
+
+      (expect pdf.images).to have_size 1
+    end
+
+    it 'should resolve target of block image if imagesdir is not set and pwd contains non-ASCII characters' do
+      Dir.chdir (File.join fixtures_dir, %(\u6d4b\u8bd5)) do
+        pdf = to_pdf <<~'EOS', analyze: :image
+        image::square.png[pdfwidth=1in]
+        EOS
+
+        (expect pdf.images).to have_size 1
+      end
     end
 
     it 'should replace block image with alt text if image is missing' do
@@ -975,6 +993,12 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       (expect to_file).to visually_match 'image-block-svg-with-image.pdf'
     end
 
+    it 'should embed SVG image from data-uri in SVG', visual: true do
+      pdf = to_pdf 'image::svg-with-data-uri-svg-image.svg[]', analyze: :rect
+      (expect pdf.rectangles).to have_size 1
+      (expect pdf.rectangles[0][:fill_color]).to eql 'FF0000'
+    end
+
     it 'should support non-standard image/jpg MIME type', visual: true do
       image_data = File.binread fixture_file 'square.jpg'
       pdf = to_pdf 'image::svg-with-data-uri-jpg-image.svg[pdfwidth=1.27cm]', analyze: :image
@@ -1101,7 +1125,18 @@ describe 'Asciidoctor::PDF::Converter - Image' do
 
       (expect pdf.pages).to have_size 3
       page_contents = pdf.objects[(pdf.page 2).page_object[:Contents]].data
-      (expect (page_contents.split ?\n).slice 0, 3).to eql ['q', '/DeviceRGB cs', '0.0 0.0 0.0 scn']
+      page_content_lines = page_contents.split ?\n
+      (expect page_content_lines.shift).to eql 'q'
+      (expect page_content_lines.shift).to eql 'q'
+      stack_size = 1
+      until (line = page_content_lines.shift).nil?
+        if line == 'q'
+          stack_size += 1
+        elsif line == 'Q'
+          break if (stack_size -= 1) == 0
+        end
+      end
+      (expect page_content_lines.slice 0, 3).to eql ['q', '/DeviceRGB cs', '0.0 0.0 0.0 scn']
     end
 
     it 'should set graphic state for running content when image does not occupy whole page' do
@@ -1128,23 +1163,23 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       end
     end
 
-    it 'should not embed local SVG in inline image', visual: true do
+    it 'should embed local SVG in inline image', visual: true do
       (expect do
         to_file = to_pdf_file <<~'EOS', 'image-inline-svg-with-local-svg.pdf'
-        image:svg-with-local-svg.svg[pdfwidth=1.27cm] lacks the red square.
+        image:svg-with-local-svg.svg[pdfwidth=1.27cm] contains a red square.
         EOS
         (expect to_file).to visually_match 'image-inline-svg-with-local-svg.pdf'
-      end).to log_message severity: :WARN, message: %(~problem encountered in image: #{fixture_file 'svg-with-local-svg.svg'}; Unsupported image type supplied to image tag)
+      end).to not_log_message
     end
 
     it 'should not embed local SVG in block image', visual: true do
       (expect do
         to_file = to_pdf_file <<~'EOS', 'image-block-svg-with-local-svg.pdf'
-        .Lacks the red square
+        .Contains a red square
         image::svg-with-local-svg.svg[pdfwidth=5in]
         EOS
         (expect to_file).to visually_match 'image-block-svg-with-local-svg.pdf'
-      end).to log_message severity: :WARN, message: %(~problem encountered in image: #{fixture_file 'svg-with-local-svg.svg'}; Unsupported image type supplied to image tag)
+      end).to not_log_message
     end
   end
 
@@ -1322,7 +1357,104 @@ describe 'Asciidoctor::PDF::Converter - Image' do
 
       (expect pdf.pages).to have_size 3
       page_contents = pdf.objects[(pdf.page 2).page_object[:Contents]].data
-      (expect (page_contents.split ?\n).slice 0, 3).to eql ['q', '/DeviceRGB cs', '0.0 0.0 0.0 scn']
+      page_content_lines = page_contents.split ?\n
+      (expect page_content_lines.shift).to eql 'q'
+      page_content_lines.shift if page_content_lines[0].empty?
+      (expect page_content_lines.shift).to eql 'q'
+      stack_size = 1
+      until (line = page_content_lines.shift).nil?
+        if line == 'q'
+          stack_size += 1
+        elsif line == 'Q'
+          break if (stack_size -= 1) == 0
+        end
+      end
+      (expect page_content_lines.slice 0, 3).to eql ['q', '/DeviceRGB cs', '0.0 0.0 0.0 scn']
+    end
+
+    it 'should place raster image in correct column when page columns are enabled' do
+      pdf_theme = {
+        page_columns: 2,
+        page_column_gap: 12,
+        thematic_break_border_color: '0000FF',
+        thematic_break_border_width: 1,
+      }
+      input = <<~'EOS'
+      left column
+
+      [.column]
+      <<<
+
+      ---
+
+      image::tux.jpg[pdfwidth=50%]
+      EOS
+
+      lines = (to_pdf input, pdf_theme: pdf_theme, analyze: :line).lines
+      thematic_break_line = lines.find {|it| it[:color] == '0000FF' && it[:width] == 1 }
+      column_left = thematic_break_line[:from][:x]
+      images = (to_pdf input, pdf_theme: pdf_theme, analyze: :image).images
+      (expect images).to have_size 1
+      (expect images[0][:page_number]).to eql 1
+      (expect images[0][:x]).to eql column_left
+    end
+
+    it 'should align raster image to right of column when page columns are enabled' do
+      pdf_theme = {
+        page_columns: 2,
+        page_column_gap: 12,
+        thematic_break_border_color: '0000FF',
+        thematic_break_border_width: 1,
+      }
+      input = <<~'EOS'
+      left column
+
+      [.column]
+      <<<
+
+      ---
+
+      image::tux.jpg[align=right,pdfwidth=50%]
+      EOS
+
+      lines = (to_pdf input, pdf_theme: pdf_theme, analyze: :line).lines
+      thematic_break_line = lines.find {|it| it[:color] == '0000FF' && it[:width] == 1 }
+      column_right = thematic_break_line[:to][:x]
+      images = (to_pdf input, pdf_theme: pdf_theme, analyze: :image).images
+      (expect images).to have_size 1
+      (expect images[0][:page_number]).to eql 1
+      (expect images[0][:width]).to eql 121.7
+      (expect images[0][:x]).to eql (column_right - images[0][:width])
+    end
+
+    it 'should align raster image to center of column when page columns are enabled' do
+      pdf_theme = {
+        page_columns: 2,
+        page_column_gap: 12,
+        thematic_break_border_color: '0000FF',
+        thematic_break_border_width: 1,
+      }
+      input = <<~'EOS'
+      left column
+
+      [.column]
+      <<<
+
+      ---
+
+      image::tux.jpg[align=center,pdfwidth=50%]
+      EOS
+
+      lines = (to_pdf input, pdf_theme: pdf_theme, analyze: :line).lines
+      thematic_break_line = lines.find {|it| it[:color] == '0000FF' && it[:width] == 1 }
+      column_left = thematic_break_line[:from][:x]
+      column_right = thematic_break_line[:to][:x]
+      images = (to_pdf input, pdf_theme: pdf_theme, analyze: :image).images
+      (expect images).to have_size 1
+      (expect images[0][:page_number]).to eql 1
+      (expect images[0][:width]).to eql 121.7
+      (expect images[0][:x]).to be > column_left
+      (expect images[0][:x] + images[0][:width]).to be < column_right
     end
   end
 
@@ -1688,7 +1820,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
   context 'Data URI' do
     it 'should embed block image if target is a JPG data URI' do
       image_data = File.binread fixture_file 'square.jpg'
-      encoded_image_data = Base64.strict_encode64 image_data
+      encoded_image_data = [image_data].pack 'm0'
       pdf = to_pdf %(image::data:image/jpg;base64,#{encoded_image_data}[])
       images = get_images pdf, 1
       (expect images).to have_size 1
@@ -1699,14 +1831,14 @@ describe 'Asciidoctor::PDF::Converter - Image' do
 
     it 'should embed block image if target is an SVG data URI' do
       image_data = File.read (fixture_file 'square.svg'), mode: 'r:UTF-8'
-      encoded_image_data = Base64.strict_encode64 image_data
+      encoded_image_data = [image_data].pack 'm0'
       pdf = to_pdf %(image::data:image/svg+xml;base64,#{encoded_image_data}[]), analyze: :rect
       (expect pdf.rectangles).to have_size 1
     end
 
     it 'should embed inline image if target is a JPG data URI' do
       image_data = File.binread fixture_file 'square.jpg'
-      encoded_image_data = Base64.strict_encode64 image_data
+      encoded_image_data = [image_data].pack 'm0'
       pdf = to_pdf %(image:data:image/jpg;base64,#{encoded_image_data}[] base64)
       images = get_images pdf, 1
       (expect images).to have_size 1
@@ -1717,7 +1849,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
 
     it 'should embed inline image if target is an SVG data URI' do
       image_data = File.read (fixture_file 'square.svg'), mode: 'r:UTF-8'
-      encoded_image_data = Base64.strict_encode64 image_data
+      encoded_image_data = [image_data].pack 'm0'
       pdf = to_pdf %(image:data:image/svg+xml;base64,#{encoded_image_data}[]), analyze: :rect
       (expect pdf.rectangles).to have_size 1
     end
@@ -2024,6 +2156,24 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       (expect to_file).to visually_match 'image-wrap-inline.pdf'
     end
 
+    it 'should not warn about missing image placeholder char in fallback font when image is advanced to next page' do
+      (expect do
+        filler = %w(filler) * 26 * %(\n\n)
+        pdf = to_pdf <<~EOS, pdf_theme: { extends: 'default-with-font-fallbacks' }
+        #{filler}
+
+        #{'x' * 200} Look for the image:square.png[].
+        EOS
+        (expect pdf.pages).to have_size 2
+        (expect get_images pdf).to have_size 1
+        (expect (get_images pdf, 1)).to be_empty
+        (expect (get_images pdf, 2)).to have_size 1
+        pdf.pages.each do |page|
+          (expect page.text).not_to include ?\u2063
+        end
+      end).to not_log_message using_log_level: :INFO
+    end
+
     it 'should increase line height if height if image height is more than 1.5x line height', visual: true do
       to_file = to_pdf_file <<~'EOS', 'image-inline-extends-line-height.pdf'
       see tux run +
@@ -2060,6 +2210,26 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       to_file = to_pdf_file %(image::#{to_file}[page=2]), 'image-inline-pushed-scale-down-height-2.pdf'
 
       (expect to_file).to visually_match 'image-inline-scale-down-height.pdf'
+    end
+
+    it 'should not warn about missing image placeholder char in AFM font when image is advanced to next page' do
+      (expect do
+        pdf = to_pdf <<~'EOS', attribute_overrides: { 'pdf-theme' => 'base' }
+        :pdf-page-size: A6
+        :pdf-page-layout: landscape
+
+        before
+
+        image:square.png[pdfwidth=7cm]
+        EOS
+        (expect pdf.pages).to have_size 2
+        (expect get_images pdf).to have_size 1
+        (expect (get_images pdf, 1)).to be_empty
+        (expect (get_images pdf, 2)).to have_size 1
+        pdf.pages.each do |page|
+          (expect page.text).not_to include ?\u2063
+        end
+      end).to not_log_message using_log_level: :INFO
     end
 
     it 'should scale image down to fit available height inside delimited block', visual: true do

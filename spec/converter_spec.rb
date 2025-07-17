@@ -142,7 +142,7 @@ describe Asciidoctor::PDF::Converter do
 
     it 'should not fail to remove tmp files if already removed' do
       image_data = File.read (fixture_file 'square.jpg'), mode: 'r:UTF-8'
-      encoded_image_data = Base64.strict_encode64 image_data
+      encoded_image_data = [image_data].pack 'm0'
       doc = Asciidoctor.load <<~EOS, backend: 'pdf'
       :page-background-image: image:data:image/png;base64,#{encoded_image_data}[Square,fit=cover]
       EOS
@@ -158,7 +158,7 @@ describe Asciidoctor::PDF::Converter do
     it 'should not fail to remove tmp files if they are not writable' do
       (expect do
         image_data = File.read (fixture_file 'square.jpg'), mode: 'r:UTF-8'
-        encoded_image_data = Base64.strict_encode64 image_data
+        encoded_image_data = [image_data].pack 'm0'
         doc = Asciidoctor.load <<~EOS, backend: 'pdf'
         :page-background-image: image:data:image/png;base64,#{encoded_image_data}[Square,fit=cover]
         EOS
@@ -180,7 +180,7 @@ describe Asciidoctor::PDF::Converter do
 
     it 'should keep tmp files if KEEP_ARTIFACTS environment variable is set' do
       image_data = File.read (fixture_file 'square.jpg'), mode: 'r:UTF-8'
-      encoded_image_data = Base64.strict_encode64 image_data
+      encoded_image_data = [image_data].pack 'm0'
       doc = Asciidoctor.load <<~EOS, backend: 'pdf'
       :page-background-image: image:data:image/png;base64,#{encoded_image_data}[Square,fit=cover]
       EOS
@@ -264,6 +264,26 @@ describe Asciidoctor::PDF::Converter do
         (expect pdf.find_text font_name: 'Times-Roman').to have_size pdf.text.size
       end
 
+      it 'should resolve theme at root of classloader when pdf-themesdir is uri:classloader:/', if: RUBY_ENGINE == 'jruby' do
+        require fixture_file 'pdf-themes.jar'
+        pdf = to_pdf <<~'EOS', attribute_overrides: { 'pdf-themesdir' => 'uri:classloader:/', 'pdf-theme' => 'custom' }, analyze: true
+        hi there
+        EOS
+
+        text = pdf.find_unique_text 'hi there'
+        (expect text[:font_color]).to eql '0000FF'
+      end
+
+      it 'should resolve theme from folder in classloader when pdf-themesdir starts with uri:classloader:', if: RUBY_ENGINE == 'jruby' do
+        require fixture_file 'pdf-themes.jar'
+        pdf = to_pdf <<~'EOS', attribute_overrides: { 'pdf-themesdir' => 'uri:classloader:/pdf-themes', 'pdf-theme' => 'another-custom' }, analyze: true
+        hi there
+        EOS
+
+        text = pdf.find_unique_text 'hi there'
+        (expect text[:font_color]).to eql 'FF0000'
+      end
+
       it 'should set text color to black when default-for-print theme is specified' do
         pdf = to_pdf <<~EOS, analyze: true
         = Document Title
@@ -331,7 +351,7 @@ describe Asciidoctor::PDF::Converter do
         (expect do
           pdf = to_pdf 'content', attribute_overrides: { 'pdf-theme' => (fixture_file 'invalid-theme.yml') }, analyze: true
           (expect pdf.pages).to have_size 1
-        end).to log_message severity: :ERROR, message: /because of NoMethodError undefined method `start_with\?' for 10:(Fixnum|Integer); reverting to default theme/
+        end).to log_message severity: :ERROR, message: /because of NoMethodError undefined method `start_with\?' for (?:10:(?:Fixnum|Integer)|an instance of Integer); reverting to default theme/
       end
 
       it 'should not crash if theme does not specify any keys' do
@@ -1370,7 +1390,7 @@ describe Asciidoctor::PDF::Converter do
         def ink_general_heading sect, title, opts = {}
           if (image_path = sect.attr 'image')
             image_attrs = { 'target' => image_path, 'pdfwidth' => '1in' }
-            image_block = ::Asciidoctor::Block.new sect.document, :image, content_model: :empty, attributes: image_attrs
+            image_block = Asciidoctor::Block.new sect.document, :image, content_model: :empty, attributes: image_attrs
             convert_image image_block, relative_to_imagesdir: true, pinned: true
           end
           super

@@ -8,8 +8,9 @@ The outline can also be deactivated with the `outline` attribute.
 [#title]
 == outline-title attribute
 
-By default, the document title is displayed as the title of the PDF outline.
+By default, the document title is displayed as the first entry in the PDF outline.
 You can customize the outline title using the `outline-title` document attribute.
+If this attribute is set and the value is not empty, it gets used instead of the document title.
 
 [,asciidoc]
 ----
@@ -20,13 +21,15 @@ You can customize the outline title using the `outline-title` document attribute
 
 The PDF outline resulting from the example above will be titled "`The Chronicles`".
 
+If you plan to override this entry for a batch of documents, you may want to use a generic term such as "Outline", "Title Page" (when the doctype is book), or "Contents".
+
 [#levels]
 == outlinelevels attribute
 
-You can adjust the depth of section levels that are displayed in the PDF outline independent of the TOC level depth with the `outlinelevels` document attribute.
-By default, `outlinelevels` is set to the same value as `toclevels` and all the included levels are fully expanded.
+You can adjust the depth of section levels that are displayed in the PDF outline independent of the TOC level depth using the `outlinelevels` document attribute.
+By default, `outlinelevels` attribute is set to the same value as `toclevels` and all the levels are fully expanded.
 
-To customize the depth of the section levels displayed in the PDF outline and their expansion, set the `outlinelevels` attribute in the header of your document and assign it an integer.
+To customize the depth of the section levels displayed in the PDF outline and configure them to be expanded, set the `outlinelevels` attribute in the header of your document and assign it an integer.
 
 [,asciidoc]
 ----

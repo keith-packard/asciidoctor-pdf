@@ -1,8 +1,8 @@
 = Optimize the PDF
 :url-hexapdf: https://hexapdf.gettalong.org/
 
-By default, Asciidoctor PDF does not optimize the PDF it generates or compresses its streams.
-This page covers several approaches you can take to optimize your PDF.
+By default, Asciidoctor PDF does not optimize the PDF it generates and it does not compress the streams within it.
+This page covers several approaches you can take to optimize and compress the PDF output.
 
 IMPORTANT: If you're creating a PDF for Amazon's Kindle Direct Publishing (KDP), GitLab repository preview, or other online publishers, you'll likely need to optimize the file before uploading.
 In their words, you must tidy up the reference tree and https://kdp.amazon.com/en_US/help/topic/G201953020#check[flatten all transparencies^] (mostly likely referring to images).
@@ -42,6 +42,7 @@ Otherwise, run the command in the *gem command* column.
 |gem install rghost
 |===
 
+[#optimize]
 === Convert and optimize
 
 Here's an example usage that converts your document and optimizes it:
@@ -77,7 +78,7 @@ If you're in this situation, it might be best to try <<hexapdf>> instead.
 
 If you're looking for a smaller file size, you can try reducing the quality of the output file by passing a quality keyword to the `optimize` attribute (e.g., `--optimize=screen`).
 The `optimize` attribute accepts the following keywords: `default` (default, same if value is empty), `screen`, `ebook`, `printer`, and `prepress`.
-Refer to the https://www.ghostscript.com/doc/current/VectorDevices.htm#PSPDF_IN[Ghostscript documentation^] to learn what settings these presets affect.
+Refer to the https://ghostscript.readthedocs.io/en/latest/VectorDevices.html#distiller-parameters[Ghostscript documentation^] to learn what settings these presets affect.
 
  $ asciidoctor-pdf -a optimize=prepress filename.adoc
 

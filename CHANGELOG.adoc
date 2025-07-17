@@ -5,6 +5,235 @@
 This document provides a high-level view of the changes to the {project-name} by release.
 For a detailed view of what has changed, refer to the {url-repo}/commits/main[commit history] on GitHub.
 
+== 2.3.19 (2024-10-11) - @mojavelinux
+
+Improvements::
+
+* replace OpenStruct with internal ThemeData class for storing theme data (#2535)
+
+Bug Fixes::
+
+* support horizontal alignment on AsciiDoc table cell that only contains paragraphs (#2358)
+* don't allow AsciiDoc table cell to overrun bottom of page on which it fits (#2538)
+* don't look for NULL glyph in fallback font as this can impact line height (#2541)
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.19[git tag] | {url-repo}/compare/v2.3.18\...v2.3.19[full diff]
+
+== 2.3.18 (2024-07-27) - @mojavelinux
+
+Bug Fixes::
+
+* position foreground image correctly when page layout changes (#2528)
+
+Compliance::
+
+* release lock on version of rexml (pulled in by asciidoctor-diagram and prawn-svg) now that incompatibility is resolved
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.18[git tag] | {url-repo}/compare/v2.3.17\...v2.3.18[full diff]
+
+== 2.3.17 (2024-06-01) - @mojavelinux
+
+Improvements::
+
+* always use /Producer field in document info to credit Asciidoctor PDF and Prawn, even when author is set (#2510)
+* map `producer` attribute to /Producer field in document info to override or default value (#2510)
+* map `publisher` attribute to /Creator field instead of /Producer field in document info; use author as fallback (#2510)
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.17[git tag] | {url-repo}/compare/v2.3.16\...v2.3.17[full diff]
+
+== 2.3.16 (2024-05-31) - @mojavelinux
+
+Improvements::
+
+* don't hyphenate autolink when hyphenation is enabled (#2521) (*@meonkeys*)
+* add support for base64-encoded SVG image reference in SVG (#2512)
+
+Bug Fixes::
+
+* duplicate attributes on table when wrapping table in breakable or unbreakable container (#2520)
+
+Compliance::
+
+* lock version of rexml (pulled in by asciidoctor-diagram and prawn-svg) to fix incompatibility
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.16[git tag] | {url-repo}/compare/v2.3.15\...v2.3.16[full diff]
+
+== 2.3.15 (2024-03-12) - @mojavelinux
+
+Improvements::
+
+* drop links from entries in TOC (#2505)
+
+Compliance::
+
+* lock ttfunk to 1.7.x to avoid requiring Ruby headers (i.e., development libraries) to install gem (#2508)
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.15[git tag] | {url-repo}/compare/v2.3.14\...v2.3.15[full diff]
+
+== 2.3.14 (2024-03-08) - @mojavelinux
+
+Improvements::
+
+* upgrade prawn-svg to 0.34 to add support for SVG referenced by image tag (SVG in SVG)
+
+Bug Fixes::
+
+* propagate source location to table cell for description in horizontal dlist so it is included in truncation warning message (#2502)
+* eradicate use of the base64 library to fix warning about base64 gem when using Ruby >= 3.3
+* upgrade prawn-svg to 0.34 to fix warning about base64 gem when using Ruby >= 3.3; apply additional patch to fix bug in prawn-svg
+
+Build / Infrastructure::
+
+* bump upper Ruby version to 3.3 in CI workflow
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.14[git tag] | {url-repo}/compare/v2.3.13\...v2.3.14[full diff]
+
+== 2.3.13 (2024-02-16) - @mojavelinux
+
+Improvements::
+
+* support toc start at value for page numbering and running content when toc is added using macro (#2489)
+
+Bug Fixes::
+
+* don't drop text on line above inline image macro in running content value (#2495)
+* when looking for a value that only contains an image macro, match the whole string instead of per line (#2495)
+* don't warn about missing character in fallback font when inline image is advanced to next page (#2492)
+* fix page number of index entries in prepress book when page numbering starts at toc or after toc and toc is inserted using macro (#2487)
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.13[git tag] | {url-repo}/compare/v2.3.12\...v2.3.13[full diff]
+
+== 2.3.12 (2024-02-02) - @mojavelinux
+
+Improvements::
+
+* add combining characters to bundled fonts (#2482)
+
+Bug Fixes::
+
+* ensure indentation is preserved at page transition of index when media=prepress; prevents margin from shifting to the left (#2480)
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.12[git tag] | {url-repo}/compare/v2.3.11\...v2.3.12[full diff]
+
+== 2.3.11 (2024-01-23) - @mojavelinux
+
+Enhancements::
+
+* upgrade prawn-svg dependency to 0.33.x (PR #2469)
+
+Improvements::
+
+* extract shared `smallcaps` method from `TextTransform#smallcaps_pcdata` to make it easier to override
+* assign node to `@node` instance variable on table instance to make it easer to access from Prawn::Table extension (#2471)
+
+Bug Fixes::
+
+* ensure color spaces are set on page before adding running content (#2477)
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.11[git tag] | {url-repo}/compare/v2.3.10\...v2.3.11[full diff]
+
+== 2.3.10 (2023-12-04) - @mojavelinux
+
+Bug Fixes::
+
+* show dot leaders in TOC entry if toclevels is increased for a given section (#2441)
+* decouple tests from path of PWD (#2444)
+* consider inherited styles when analyzing glyphs for fallback font support (#2463)
+* add fallback character for placeholder character when using AFM font (#2453)
+* don't advance image that's first child of block at top of page if image is taller than page (#2012)
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.10[git tag] | {url-repo}/compare/v2.3.9\...v2.3.10[full diff]
+
+== 2.3.9 (2023-06-28) - @mojavelinux
+
+Bug Fixes::
+
+* correctly align block image in raster format in column when align is right or center and page columns are enabled (#2433)
+* honor table caption end placement (`table-caption-end` theme key) when `unbreakable` (or `breakable`) option is set on table (#2434)
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.9[git tag] | {url-repo}/compare/v2.3.8\...v2.3.9[full diff]
+
+== 2.3.8 (2023-06-25) - @mojavelinux
+
+Improvements::
+
+* do not attempt to fit inline image in normal table cell to computed height of cell (#2428)
+* support `fit=none` attribute on inline image to prevent image from being scaled down to fit available height (#2428)
+
+Bug Fixes::
+
+* remove null character enclosed in XML tag when sanitizing text; fixes invisible text in outline when heading contains index term (#2430)
+* alias `File.exists?` to `File.exist?` when loading RGhost optimizer to patch incompatibility when using Ruby 3.2
+
+Build / Infrastructure::
+
+* bump upper Ruby version from 3.1 to 3.2 in CI workflow
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.8[git tag] | {url-repo}/compare/v2.3.7\...v2.3.8[full diff]
+
+== 2.3.7 (2023-04-16) - @mojavelinux
+
+Bug Fixes::
+
+* don't crash if source block with custom subs is empty and source highlighter is enabled
+* add workaround for JRuby on Windows when value of `imagesdir` attribute is absolute and contains non-ASCII characters
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.7[git tag] | {url-repo}/compare/v2.3.6\...v2.3.7[full diff]
+
+== 2.3.6 (2023-04-09) - @mojavelinux
+
+Bug Fixes::
+
+* rework `File.absolute_path?` patch so it returns correct response when running on JRuby
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.6[git tag] | {url-repo}/compare/v2.3.5\...v2.3.6[full diff]
+
+== 2.3.5 (2023-03-31) - @mojavelinux
+
+Enhancements::
+
+* add `callout-list-marker-font-color` theme key to control color of conum marker in callout list (#2402)
+
+Bug Fixes::
+
+* catalog all footnotes found inside AsciiDoc table cells and render them in the footnotes list (#2410)
+* do not drop section that follows empty index (#2368)
+* restore bottom margin on table with `breakable` or `unbreakable` option (#2379)
+* honor theme settings for caption on table with `breakable` or `unbreakable` option (#2379)
+* use first recto page after toc when media is prepress and page numbering or running content start-at value is `after-toc` (#2398)
+
+=== Details
+
+{url-repo}/releases/tag/v2.3.5[git tag] | {url-repo}/compare/v2.3.4\...v2.3.5[full diff]
+
 == 2.3.4 (2022-10-29) - @mojavelinux
 
 Bug Fixes::

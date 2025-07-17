@@ -8,6 +8,7 @@ module Asciidoctor
       TagFilterRx = /(<[^>]+>)|([^<]+)/
       ContiguousCharsRx = /\p{Graph}+/
       WordRx = /\p{Word}+/
+      BareClassRx = / class="bare[" ]/
       Hyphen = '-'
       SoftHyphen = ?\u00ad
       LowerAlphaChars = 'a-z'
@@ -31,7 +32,15 @@ module Asciidoctor
 
       def hyphenate_words_pcdata string, hyphenator
         if XMLMarkupRx.match? string
-          string.gsub(PCDATAFilterRx) { $2 ? (hyphenate_words $2, hyphenator) : $1 }
+          skipping = false
+          string.gsub PCDATAFilterRx do
+            if $2
+              skipping ? $2 : (hyphenate_words $2, hyphenator)
+            else
+              skipping = skipping ? $1 != '</a>' : ($1.start_with? '<a ') && (BareClassRx.match? $1)
+              $1
+            end
+          end
         else
           hyphenate_words string, hyphenator
         end
@@ -59,10 +68,14 @@ module Asciidoctor
 
       def smallcaps_pcdata string
         if XMLMarkupRx.match? string
-          string.gsub(PCDATAFilterRx) { $2 ? ($2.tr LowerAlphaChars, SmallCapsChars) : $1 }
+          string.gsub(PCDATAFilterRx) { $2 ? (smallcaps $2) : $1 }
         else
-          string.tr LowerAlphaChars, SmallCapsChars
+          smallcaps string
         end
+      end
+
+      def smallcaps string
+        string.tr LowerAlphaChars, SmallCapsChars
       end
 
       # Apply the text transform to the specified text.

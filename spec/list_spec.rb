@@ -1500,6 +1500,19 @@ describe 'Asciidoctor::PDF::Converter - List' do
           (expect texts[0][:y].round 2).to eql (texts[1][:y].round 2)
         end
       end
+
+      it 'should report source location of truncated item description in dlist' do
+        (expect do
+          pdf = to_pdf <<~EOS, sourcemap: true, attribute_overrides: { 'docfile' => 'test.adoc' }, analyze: true
+          [horizontal]
+          step 1::
+          #{['* task'] * 50 * ?\n}
+          EOS
+
+          (expect pdf.pages.size).to eql 1
+          (expect (pdf.find_unique_text 'step 1')).not_to be_nil
+        end).to log_message severity: :ERROR, message: 'the table cell on page 1 has been truncated; Asciidoctor PDF does not support table cell content that exceeds the height of a single page', file: 'test.adoc', lineno: 3
+      end
     end
 
     context 'Unordered' do
@@ -1894,6 +1907,7 @@ describe 'Asciidoctor::PDF::Converter - List' do
         callout_list_font_size: 9,
         callout_list_font_color: '555555',
         callout_list_item_spacing: 3,
+        callout_list_marker_font_color: '0000FF',
         conum_font_size: nil,
       }
 
@@ -1910,8 +1924,9 @@ describe 'Asciidoctor::PDF::Converter - List' do
       conum_1_text = pdf.find_text ?\u2460
       (expect conum_1_text).to have_size 2
       (expect conum_1_text[0][:font_size]).to eql 11
+      (expect conum_1_text[0][:font_color]).to eql 'B12146'
       (expect conum_1_text[1][:font_size]).to eql 9
-      (expect conum_1_text[1][:font_color]).to eql 'B12146'
+      (expect conum_1_text[1][:font_color]).to eql '0000FF'
       colist_1_text = pdf.find_unique_text %r/^The base URL/
       (expect colist_1_text[:font_size]).to eql 9
       (expect colist_1_text[:font_color]).to eql '555555'

@@ -109,7 +109,7 @@ module Asciidoctor
       MeasurementPartsRx = /^(\d+(?:\.\d+)?)(in|mm|cm|p[txc])?$/
       PageSizeRx = /^(?:\[(#{MeasurementRxt}), ?(#{MeasurementRxt})\]|(#{MeasurementRxt})(?: x |x)(#{MeasurementRxt})|\S+)$/
       CalloutExtractRx = %r((?:(?://|#|--|;;) ?)?(\\)?<!?(|--)(\d+|\.)\2> ?(?=(?:\\?<!?\2(?:\d+|\.)\2> ?)*$))
-      ImageAttributeValueRx = /^image:{1,2}(.*?)\[(.*?)\]$/
+      ImageAttributeValueRx = /^\Aimage:{1,2}(.*?)\[(.*?)\]$\Z/
       StopPunctRx = /[.!?;:]$/
       UriBreakCharsRx = %r((?:/|\?|&amp;|#)(?!$))
       UriBreakCharRepl = %(\\&#{ZeroWidthSpace})
@@ -166,6 +166,7 @@ module Asciidoctor
         doc.attributes['outline-title'] = '' if doc.attr_unspecified? 'outline-title'
         doc.attributes['pagenums'] = '' if doc.attr_unspecified? 'pagenums'
 
+        # NOTE: & prefix required here to pass resolved method as block of on_page_create method
         on_page_create(&(method :init_page).curry[doc])
 
         marked_page_number = page_number
@@ -173,7 +174,7 @@ module Asciidoctor
         ink_cover_page doc, :front
         has_front_cover = page_number > marked_page_number
         doctype = doc.doctype
-        if (has_title_page = (title_page_on = doctype == 'book' || (doc.attr? 'title-page')) && (start_title_page doc))
+        if (has_title_page = (title_as_page = doctype == 'book' || (doc.attr? 'title-page')) && (start_title_page doc))
           # NOTE: the base font must be set before any content is written to the main or scratch document
           font @theme.base_font_family, size: @root_font_size, style: @theme.base_font_style
           if perform_on_single_page { ink_title_page doc }
@@ -188,7 +189,7 @@ module Asciidoctor
           font @theme.base_font_family, size: @root_font_size, style: @theme.base_font_style
         end
 
-        unless title_page_on
+        unless title_as_page
           body_start_page_number = page_number
           theme_font :heading, level: 1 do
             ink_general_heading doc, doc.doctitle, align: (@theme.heading_h1_text_align&.to_sym || :center), level: 1, role: :doctitle
@@ -199,10 +200,10 @@ module Asciidoctor
 
         indent_section do
           toc_num_levels = (doc.attr 'toclevels', 2).to_i
-          if (insert_toc = (doc.attr? 'toc') && !((toc_placement = doc.attr 'toc-placement') == 'macro' || toc_placement == 'preamble') && !(get_entries_for_toc doc).empty?)
+          if (toc_at_top = (doc.attr? 'toc') && !((toc_placement = doc.attr 'toc-placement') == 'macro' || toc_placement == 'preamble') && !(get_entries_for_toc doc).empty?)
             start_new_page if @ppbook && verso_page?
             add_dest_for_block doc, id: 'toc', y: (at_page_top? ? page_height : nil)
-            @toc_extent = allocate_toc doc, toc_num_levels, cursor, (title_page_on && theme.toc_break_after != 'auto')
+            @toc_extent = allocate_toc doc, toc_num_levels, cursor, (title_as_page && theme.toc_break_after != 'auto')
           else
             @toc_extent = nil
           end
@@ -214,7 +215,7 @@ module Asciidoctor
             min_start_at = 1
           end
 
-          if title_page_on
+          if title_as_page
             zero_page_offset = has_front_cover ? 1 : 0
             first_page_offset = has_title_page ? zero_page_offset.next : zero_page_offset
             body_offset = (body_start_page_number = page_number) - 1
@@ -227,8 +228,10 @@ module Asciidoctor
               when 'title'
                 running_content_start_at = 'toc' unless has_title_page
               when 'toc'
-                running_content_start_at = 'body' unless insert_toc
+                uses_start_at_toc = true
+                running_content_start_at = 'body' unless toc_at_top
               when 'after-toc'
+                uses_start_at_after_toc = true
                 running_content_start_at = 'body'
               end
             end
@@ -247,8 +250,10 @@ module Asciidoctor
               when 'title'
                 page_numbering_start_at = 'toc' unless has_title_page
               when 'toc'
-                page_numbering_start_at = 'body' unless insert_toc
+                uses_start_at_toc = true
+                page_numbering_start_at = 'body' unless toc_at_top
               when 'after-toc'
+                uses_start_at_after_toc = true
                 page_numbering_start_at = 'body'
               end
             end
@@ -302,9 +307,18 @@ module Asciidoctor
           end
 
           if (toc_extent = @toc_extent)
-            if title_page_on && !insert_toc
-              num_front_matter_pages[0] = toc_extent.to.page if @theme.running_content_start_at == 'after-toc'
-              num_front_matter_pages[1] = toc_extent.to.page if @theme.page_numbering_start_at == 'after-toc'
+            if title_as_page && !toc_at_top && (uses_start_at_toc || uses_start_at_after_toc)
+              if uses_start_at_toc
+                toc_offset = toc_extent.from.page - 1
+                num_front_matter_pages[0] = toc_offset if @theme.running_content_start_at == 'toc'
+                num_front_matter_pages[1] = toc_offset if @theme.page_numbering_start_at == 'toc'
+              end
+              if uses_start_at_after_toc
+                after_toc_offset = toc_extent.to.page
+                after_toc_offset += 1 if @ppbook && (recto_page? after_toc_offset)
+                num_front_matter_pages[0] = after_toc_offset if @theme.running_content_start_at == 'after-toc'
+                num_front_matter_pages[1] = after_toc_offset if @theme.page_numbering_start_at == 'after-toc'
+              end
             end
             toc_page_nums = ink_toc doc, toc_num_levels, toc_extent.from.page, toc_extent.from.cursor, num_front_matter_pages[1]
           else
@@ -373,7 +387,7 @@ module Asciidoctor
         if (rotated_page_margin = resolve_page_margin (doc.attr 'pdf-page-margin-rotated') || theme.page_margin_rotated)
           rotated_page_margin = expand_margin_value rotated_page_margin
           @edge_shorthand_cache = nil
-          @page_margin[PageLayouts[(PageLayouts.index page.layout) - 1]] = { recto: rotated_page_margin, verso: rotated_page_margin.dup }
+          @page_margin[PageLayouts[(PageLayouts.index page.layout) - 1]] = { recto: rotated_page_margin, verso: (rotated_page_margin.drop 0) }
         end
         if @media == 'prepress'
           @ppbook = doc.doctype == 'book'
@@ -511,13 +525,12 @@ module Asciidoctor
         end
         info[:Subject] = (sanitize doc.attr 'subject').as_pdf if doc.attr? 'subject'
         info[:Keywords] = (sanitize doc.attr 'keywords').as_pdf if doc.attr? 'keywords'
-        info[:Producer] = (sanitize doc.attr 'publisher').as_pdf if doc.attr? 'publisher'
+        info[:Creator] = (doc.attr? 'publisher') ? (sanitize doc.attr 'publisher').as_pdf : (info[:Author] || '')
+        info[:Producer] = (sanitize doc.attr 'producer').as_pdf if doc.attr? 'producer'
         if doc.attr? 'reproducible'
-          info[:Creator] = 'Asciidoctor PDF, based on Prawn'.as_pdf
-          info[:Producer] ||= (info[:Author] || info[:Creator])
+          info[:Producer] ||= 'Asciidoctor PDF, based on Prawn'.as_pdf
         else
-          info[:Creator] = %(Asciidoctor PDF #{::Asciidoctor::PDF::VERSION}, based on Prawn #{::Prawn::VERSION}).as_pdf
-          info[:Producer] ||= (info[:Author] || info[:Creator])
+          info[:Producer] ||= %(Asciidoctor PDF #{::Asciidoctor::PDF::VERSION}, based on Prawn #{::Prawn::VERSION}).as_pdf
           # NOTE: since we don't track the creation date of the input file, we map the ModDate header to the last modified
           # date of the input document and the CreationDate header to the date the PDF was produced by the converter.
           info[:ModDate] = (::Time.parse doc.attr 'docdatetime') rescue (now ||= ::Time.now)
@@ -627,7 +640,8 @@ module Asciidoctor
           sect.context = :open
           return convert_abstract sect
         elsif (index_section = sectname == 'index') && @index.empty?
-          sect.remove
+          # override numbered_title to hide entry from TOC
+          sect.define_singleton_method :numbered_title, ->(*) { '' }
           return
         end
         title = sect.numbered_title formal: true
@@ -1043,7 +1057,7 @@ module Asciidoctor
             else
               highlighter = nil
             end
-            saved_subs = (subs = node.subs).dup
+            saved_subs = (subs = node.subs).drop 0
             callouts_enabled = subs.include? :callouts
             highlight_idx = subs.index :highlight
             # NOTE: scratch? here only applies if listing block is nested inside another block
@@ -1064,9 +1078,9 @@ module Asciidoctor
                 source_string = expand_tabs node.content
               else
                 if callouts_enabled
-                  saved_lines = node.lines.dup
+                  saved_lines = node.lines.drop 0
                   subs.delete :callouts
-                  prev_subs = subs.dup
+                  prev_subs = subs.drop 0
                   subs.clear
                   source_string, conum_mapping = extract_conums node.content
                   node.lines.replace (source_string.split LF)
@@ -1074,8 +1088,9 @@ module Asciidoctor
                   callouts_enabled = false
                 end
                 subs[highlight_idx] = :specialcharacters
+                source_string = node.content || ''
                 # NOTE: indentation guards will be added by the source highlighter logic
-                source_string = expand_tabs unescape_xml (sanitize node.content, compact: false)
+                source_string = expand_tabs unescape_xml (sanitize source_string, compact: false) unless source_string.empty?
                 node.lines.replace saved_lines if saved_lines
               end
             else
@@ -1244,7 +1259,7 @@ module Asciidoctor
         if !at_page_top? && (has_title || id || (node.option? 'unbreakable'))
           arrange_block node do
             add_dest_for_block node if id
-            tare_first_page_content_stream { ink_caption node, labeled: false } if has_title
+            tare_first_page_content_stream { ink_caption node, category: (node.style === 'table-container' ? :table : nil), labeled: false } if has_title
             traverse node
           end
         else
@@ -1364,9 +1379,10 @@ module Asciidoctor
         @list_numerals << (index = @list_numerals.pop).next
         theme_font :conum do
           marker_width = rendered_width_of_string %(#{marker = conum_glyph index}x)
+          marker_font_color = @theme.callout_list_marker_font_color || @font_color
           float do
             bounding_box [bounds.left, cursor], width: marker_width do
-              ink_prose marker, align: :center, inline_format: false, margin: 0
+              ink_prose marker, align: :center, inline_format: false, margin: 0, color: marker_font_color
             end
           end
         end
@@ -1414,7 +1430,7 @@ module Asciidoctor
             term_inline_format = (term_font_styles = font_styles).empty? ? true : [inherited: { styles: term_font_styles }]
             term_line_metrics = calc_line_metrics @base_line_height
             term_padding_no_blocks = [term_line_metrics.padding_top, 10, term_line_metrics.padding_bottom, 10]
-            (term_padding = term_padding_no_blocks.dup)[2] += @theme.prose_margin_bottom * 0.5
+            (term_padding = (term_padding_no_blocks.drop 0))[2] += @theme.prose_margin_bottom * 0.5
             desc_padding = [0, 10, 0, 10]
             term_kerning = default_kerning?
           end
@@ -1441,7 +1457,7 @@ module Asciidoctor
               desc_container = Block.new node, :open
               desc_container << (Block.new desc_container, :paragraph, source: (desc.instance_variable_get :@text), subs: :default) if desc.text?
               desc.blocks.each {|b| desc_container << b.dup } if desc.blocks?
-              row_data << { content: (::Prawn::Table::Cell::AsciiDoc.new self, content: (item[1] = desc_container), text_color: @font_color, padding: desc_padding, valign: :top) }
+              row_data << { content: (::Prawn::Table::Cell::AsciiDoc.new self, content: (item[1] = desc_container), text_color: @font_color, padding: desc_padding, valign: :top, source_location: desc.source_location) }
             else
               row_data << {}
             end
@@ -1704,7 +1720,7 @@ module Asciidoctor
         if image_format == 'gif' && !(defined? ::GMagick::Image)
           log :warn, %(GIF image format not supported. Install the prawn-gmagick gem or convert #{target} to PNG.)
           image_path = nil
-        elsif ::Base64 === target
+        elsif ::Asciidoctor::Image::Base64Encoded === target
           image_path = target
         elsif (image_path = resolve_image_path node, target, image_format, (opts.fetch :relative_to_imagesdir, true))
           if image_format == 'pdf'
@@ -1773,8 +1789,8 @@ module Asciidoctor
           rendered_h = rendered_w = nil
           span_page_width_if align_to_page do
             if image_format == 'svg'
-              if ::Base64 === image_path
-                svg_data = ::Base64.decode64 image_path
+              if ::Asciidoctor::Image::Base64Encoded === image_path
+                svg_data = image_path.unpack1 'm'
                 file_request_root = false
               else
                 svg_data = ::File.read image_path, mode: 'r:UTF-8'
@@ -1795,16 +1811,13 @@ module Asciidoctor
               end
               # NOTE: shrink image so it fits within available space; group image & caption
               if (rendered_h = svg_size.output_height) > (available_h = cursor - caption_h)
-                unless pinned || at_page_top?
+                unless pinned || at_page_top? || (node.first_child? && (node.parent.attr? 'pdf-at-top'))
                   advance_page
                   available_h = cursor - caption_h
                 end
                 rendered_w = (svg_obj.resize height: (rendered_h = available_h)).output_width if rendered_h > available_h
               end
               add_dest_for_block node if node.id
-              # NOTE: workaround to fix Prawn not adding fill and stroke commands on page that only has an image;
-              # breakage occurs when running content (stamps) are added to page
-              update_colors if graphic_state.color_space.empty?
               ink_caption node, category: :image, end: :top, block_align: alignment, block_width: rendered_w, max_width: caption_max_width if caption_end == :top && node.title?
               image_y = y
               # NOTE: prawn-svg does not compute :at for alignment correctly in column box, so resort to our own logic
@@ -1828,8 +1841,8 @@ module Asciidoctor
             else
               # FIXME: this code really needs to be better organized!
               # NOTE: use low-level API to access intrinsic dimensions; build_image_object caches image data previously loaded
-              image_obj, image_info = ::Base64 === image_path ?
-                  ::StringIO.open((::Base64.decode64 image_path), 'rb') {|fd| build_image_object fd } :
+              image_obj, image_info = ::Asciidoctor::Image::Base64Encoded === image_path ?
+                  ::StringIO.open((image_path.unpack1 'm'), 'rb') {|fd| build_image_object fd } :
                   ::File.open(image_path, 'rb') {|fd| build_image_object fd }
               actual_w = to_pt image_info.width, :px
               width = actual_w * scale if scale
@@ -1837,21 +1850,25 @@ module Asciidoctor
               rendered_w, rendered_h = image_info.calc_image_dimensions width: (width || [available_w, actual_w].min)
               # NOTE: shrink image so it fits within available space; group image & caption
               if rendered_h > (available_h = cursor - caption_h)
-                unless pinned || at_page_top?
+                unless pinned || at_page_top? || (node.first_child? && (node.parent.attr? 'pdf-at-top'))
                   advance_page
                   available_h = cursor - caption_h
                 end
                 rendered_w = (image_info.calc_image_dimensions height: (rendered_h = available_h))[0] if rendered_h > available_h
               end
               add_dest_for_block node if node.id
-              # NOTE: workaround to fix Prawn not adding fill and stroke commands on page that only has an image;
-              # breakage occurs when running content (stamps) are added to page
-              update_colors if graphic_state.color_space.empty?
               ink_caption node, category: :image, end: :top, block_align: alignment, block_width: rendered_w, max_width: caption_max_width if caption_end == :top && node.title?
               image_y = y
-              image_cursor = cursor
+              left = bounds.left
+              # NOTE: prawn does not compute :at for alignment correctly in column box, so resort to our own logic
+              case alignment
+              when :center
+                left += (available_w - rendered_w) * 0.5
+              when :right
+                left += available_w - rendered_w
+              end
               # NOTE: specify both width and height to avoid recalculation
-              embed_image image_obj, image_info, width: rendered_w, height: rendered_h, position: alignment
+              embed_image image_obj, image_info, at: [left, (image_cursor = cursor)], height: rendered_h, width: rendered_w
               draw_image_border image_cursor, rendered_w, rendered_h, alignment unless pinned || (node.role? && (node.has_role? 'noborder'))
               if (link = node.attr 'link')
                 add_link_to_image link, { width: rendered_w, height: rendered_h }, position: alignment, y: image_y
@@ -1967,16 +1984,21 @@ module Asciidoctor
       end
 
       def convert_table node
+        caption_end = (theme = @theme).table_caption_end&.to_sym || :top
         if !at_page_top? && ((unbreakable = node.option? 'unbreakable') || ((node.option? 'breakable') && (node.id || node.title?)))
-          (table_container = Block.new (table_dup = node.dup), :open) << table_dup
+          # NOTE: we use the current node as the parent so we can navigate back into the document model
+          (table_container = Block.new node, :open) << (table_dup = node.dup)
+          # NOTE: we need to duplicate the attributes so that the unbreakable/breakable option is preserved on subsequent conversions
+          table_dup.instance_variable_set :@attributes, node.attributes.dup
           if unbreakable
             table_dup.remove_attr 'unbreakable-option'
             table_container.set_attr 'unbreakable-option'
           else
             table_dup.remove_attr 'breakable-option'
           end
+          table_container.style = 'table-container'
           table_container.id, table_dup.id = table_dup.id, nil
-          if table_dup.title?
+          if caption_end == :top && table_dup.title?
             table_container.title = ''
             table_container.instance_variable_set :@converted_title, table_dup.captioned_title
             table_dup.title = nil
@@ -1988,7 +2010,6 @@ module Asciidoctor
         num_rows = node.attr 'rowcount'
         num_cols = node.columns.size
         table_header_size = false
-        theme = @theme
         prev_font_scale, @font_scale = @font_scale, 1 if node.document.nested?
 
         tbl_bg_color = resolve_theme_color :table_background_color
@@ -2014,15 +2035,15 @@ module Asciidoctor
           head_rows = node.rows[:head]
           body_rows = node.rows[:body]
           #if (hrows = node.attr 'hrows') && (shift_rows = hrows.to_i - head_rows.size) > 0
-          #  head_rows = head_rows.dup
-          #  body_rows = body_rows.dup
+          #  head_rows = head_rows.drop 0
+          #  body_rows = body_rows.drop 0
           #  shift_rows.times { head_rows << body_rows.shift unless body_rows.empty? }
           #end
           theme_font :table_head do
             table_header_size = head_rows.size
             head_font_info = font_info
             head_line_metrics = calc_line_metrics theme.table_head_line_height || theme.table_cell_line_height || @base_line_height
-            head_cell_padding = ((head_cell_padding = theme.table_head_cell_padding) ? (expand_padding_value head_cell_padding) : body_cell_padding).dup
+            head_cell_padding = (theme.table_head_cell_padding ? (expand_padding_value theme.table_head_cell_padding) : body_cell_padding).drop 0
             head_cell_padding[0] += head_line_metrics.padding_top
             head_cell_padding[2] += head_line_metrics.padding_bottom
             # QUESTION: why doesn't text transform inherit from table?
@@ -2133,7 +2154,7 @@ module Asciidoctor
                 cell_data = { content: asciidoc_cell, source_location: cell.source_location }
               end
               if cell_line_metrics
-                cell_padding = body_cell_padding.dup
+                cell_padding = body_cell_padding.drop 0
                 cell_padding[0] += cell_line_metrics.padding_top
                 cell_padding[2] += cell_line_metrics.padding_bottom
                 cell_data[:leading] = cell_line_metrics.leading
@@ -2226,7 +2247,6 @@ module Asciidoctor
           alignment = theme.table_align&.to_sym || :left
         end
 
-        caption_end = theme.table_caption_end&.to_sym || :top
         caption_max_width = theme.table_caption_max_width || 'fit-content'
 
         table_settings = {
@@ -2253,12 +2273,13 @@ module Asciidoctor
 
         left_padding = right_padding = nil
         table table_data, table_settings do
+          instance_variable_set :@node, node
           # NOTE: cell_style must be applied manually to be compatible with both prawn-table 0.2.2 and prawn-table 0.2.3
           cells.style cell_style
           @column_widths = column_widths unless column_widths.empty?
           # NOTE: call width to capture resolved table width
           table_width = width
-          @pdf.ink_table_caption node, alignment, table_width, caption_max_width if node.title? && caption_end == :top
+          @pdf.ink_table_caption node, alignment, table_width, caption_max_width if caption_end == :top && node.title?
           # NOTE: align using padding instead of bounding_box as prawn-table does
           # using a bounding_box across pages mangles the margin box of subsequent pages
           if alignment != :left && table_width != (this_bounds = @pdf.bounds).width
@@ -2331,7 +2352,7 @@ module Asciidoctor
           bounds.subtract_left_padding left_padding
           bounds.subtract_right_padding right_padding if right_padding
         end
-        ink_table_caption node, alignment, table_width, caption_max_width, caption_end if node.title? && caption_end == :bottom
+        ink_table_caption node, alignment, table_width, caption_max_width, caption_end if caption_end == :bottom && node.title?
         theme_margin :block, :bottom, (next_enclosed_block node)
       rescue ::Prawn::Errors::CannotFit
         log :error, (message_with_context 'cannot fit contents of table cell into specified column width', source_location: node.source_location)
@@ -2357,8 +2378,16 @@ module Asciidoctor
         if ((doc = node.document).attr? 'toc-placement', placement) && (doc.attr? 'toc') && !(get_entries_for_toc doc).empty?
           start_toc_page node, placement if (is_book = doc.doctype == 'book')
           add_dest_for_block node, id: (node.id || 'toc') if is_macro
-          toc_extent = @toc_extent = allocate_toc doc, (doc.attr 'toclevels', 2).to_i, cursor, (title_page_on = is_book || (doc.attr? 'title-page'))
-          @index.start_page_number = toc_extent.to.page + 1 if title_page_on && @theme.page_numbering_start_at == 'after-toc'
+          toc_extent = @toc_extent = allocate_toc doc, (doc.attr 'toclevels', 2).to_i, cursor, (title_as_page = is_book || (doc.attr? 'title-page'))
+          if title_as_page
+            if @theme.page_numbering_start_at == 'toc'
+              @index.start_page_number = toc_extent.from.page
+            elsif @theme.page_numbering_start_at == 'after-toc'
+              new_start_page_number = toc_extent.to.page + 1
+              new_start_page_number += 1 if @ppbook && (verso_page? new_start_page_number)
+              @index.start_page_number = new_start_page_number
+            end
+          end
           if is_macro
             @disable_running_content[:header] += toc_extent.page_range if node.option? 'noheader'
             @disable_running_content[:footer] += toc_extent.page_range if node.option? 'nofooter'
@@ -3433,7 +3462,7 @@ module Asciidoctor
                 val = val.to_s unless ::String === val
                 if (val.include? ':') && val =~ ImageAttributeValueRx
                   attrlist = $2
-                  image_attrs = (AttributeList.new attrlist).parse %w(alt width)
+                  image_attrs = (::Asciidoctor::AttributeList.new attrlist).parse %w(alt width)
                   image_path, image_format = ::Asciidoctor::Image.target_and_format $1, image_attrs
                   image_path = apply_subs_discretely doc, image_path, subs: [:attributes], imagesdir: @themesdir
                   if (image_path = resolve_image_path doc, image_path, image_format, @themesdir) && (::File.readable? image_path)
@@ -3575,7 +3604,16 @@ module Asciidoctor
 
         pagenums_enabled = doc.attr? 'pagenums'
         periphery_layout_cache = {}
-        # NOTE: this block is invoked during PDF generation, after #write -> #render_file and thus after #convert_document
+        # NOTE: Prawn fails to properly set color spaces on empty pages, but repeater relies on them
+        # prefer simpler fix below call to repeat; keep this workaround in case that workaround stops working
+        #(content_start_page_number..num_pages).each do |pgnum|
+        #  next if (disable_on_pages.include? pgnum) || (pg = state.pages[pgnum - 1]).imported_page? || !pg.graphic_state.color_space.empty?
+        #  go_to_page pgnum
+        #  set_color_space :fill, (color_space graphic_state.fill_color)
+        #  set_color_space :stroke, (color_space graphic_state.stroke_color)
+        #end
+        #go_to_page content_start_page_number if page_number != content_start_page_number
+        # NOTE: this block is invoked during PDF generation, during call to #write -> #render_file and thus after #convert_document
         repeat (content_start_page_number..num_pages), dynamic: true do
           pgnum = page_number
           # NOTE: don't write on pages which are imported / inserts (otherwise we can get a corrupt PDF)
@@ -3686,7 +3724,12 @@ module Asciidoctor
             end
           end
         end
-
+        # NOTE: force repeater to consult color spaces on current page instead of the page on which repeater was created
+        # if this stops working, use the commented code above repeat call instead
+        unless (repeater_graphic_state = repeaters[-1].instance_variable_get :@graphic_state).singleton_methods.include? :color_space
+          # NOTE: must convert override method to proc since we're are changing bind argument
+          repeater_graphic_state.define_singleton_method :color_space, (method :page_color_space).to_proc
+        end
         go_to_page prev_page_number
         nil
       end
@@ -3697,11 +3740,11 @@ module Asciidoctor
 
         if @theme.title_page_logo_display != 'none' && (logo_image_path = (doc.attr 'title-logo-image') || (logo_image_from_theme = @theme.title_page_logo_image))
           if (logo_image_path.include? ':') && logo_image_path =~ ImageAttributeValueRx
-            logo_image_attrs = (AttributeList.new $2).parse %w(alt width height)
+            logo_image_attrs = (::Asciidoctor::AttributeList.new $2).parse %w(alt width height)
             if logo_image_from_theme
               relative_to_imagesdir = false
               logo_image_path = apply_subs_discretely doc, $1, subs: [:attributes], imagesdir: @themesdir
-              logo_image_path = ThemeLoader.resolve_theme_asset logo_image_path, @themesdir unless doc.is_uri? logo_image_path
+              logo_image_path = ThemeLoader.resolve_theme_asset logo_image_path, @themesdir unless (::File.absolute_path? logo_image_path) || (doc.is_uri? logo_image_path)
             else
               relative_to_imagesdir = true
               logo_image_path = $1
@@ -3711,7 +3754,7 @@ module Asciidoctor
             relative_to_imagesdir = false
             if logo_image_from_theme
               logo_image_path = apply_subs_discretely doc, logo_image_path, subs: [:attributes], imagesdir: @themesdir
-              logo_image_path = ThemeLoader.resolve_theme_asset logo_image_path, @themesdir unless doc.is_uri? logo_image_path
+              logo_image_path = ThemeLoader.resolve_theme_asset logo_image_path, @themesdir unless (::File.absolute_path? logo_image_path) || (doc.is_uri? logo_image_path)
             end
           end
           if (::Asciidoctor::Image.target_and_format logo_image_path)[1] == 'pdf'
@@ -3846,7 +3889,7 @@ module Asciidoctor
               font_style: dot_leader_font_style,
               font_size: font_size,
               levels: ((dot_leader_l = @theme.toc_dot_leader_levels) == 'none' ? ::Set.new :
-                  (dot_leader_l && dot_leader_l != 'all' ? dot_leader_l.to_s.split.map(&:to_i).to_set : (0..num_levels).to_set)),
+                  (dot_leader_l && dot_leader_l != 'all' ? dot_leader_l.to_s.split.map(&:to_i).to_set : nil)),
               text: (dot_leader_text = @theme.toc_dot_leader_content || DotLeaderTextDefault),
               width: dot_leader_text.empty? ? 0 : (rendered_width_of_string dot_leader_text),
               # TODO: spacer gives a little bit of room between dots and page number
@@ -3875,6 +3918,7 @@ module Asciidoctor
           theme_font :toc, level: entry_level do
             entry_title = entry.context == :section ? entry.numbered_title : (entry.title? ? entry.title : (entry.xreftext 'basic'))
             next if entry_title.empty?
+            entry_title = entry_title.gsub DropAnchorRx, '' if entry_title.include? '<a'
             entry_title = transform_text entry_title, @text_transform if @text_transform
             pgnum_label_placeholder_width = rendered_width_of_string '0' * @toc_max_pagenum_digits
             # NOTE: only write title (excluding dots and page number) if this is a dry run
@@ -3920,7 +3964,7 @@ module Asciidoctor
               end_cursor = cursor
               move_cursor_to start_cursor
               # NOTE: we're guaranteed to be on the same page as the final line of the entry
-              if dot_leader[:width] > 0 && (dot_leader[:levels].include? entry_level.pred)
+              if dot_leader[:width] > 0 && (dot_leader[:levels] ? (dot_leader[:levels].include? entry_level.pred) : true)
                 pgnum_label_width = rendered_width_of_string pgnum_label
                 pgnum_label_font_settings = { color: @font_color, font: font_family, size: @font_size, styles: font_styles }
                 save_font do
@@ -4018,7 +4062,9 @@ module Asciidoctor
         end
         siblings = siblings.flatten if parent_context == :dlist
         if block != siblings[-1]
-          (self_idx = siblings.index block) && siblings[self_idx + 1]
+          context == :open && block.style == 'table-container' ?
+            (next_enclosed_block parent) :
+            (self_idx = siblings.index block) && siblings[self_idx + 1]
         elsif parent_context == :list_item || (parent_context == :open && parent.style != 'abstract') || parent_context == :section
           next_enclosed_block parent
         elsif list_item && (grandparent = parent.parent).context == :list_item
@@ -4086,7 +4132,7 @@ module Asciidoctor
           elsif image_path == 'none'
             return []
           elsif (image_path.include? ':') && image_path =~ ImageAttributeValueRx
-            image_attrs = (AttributeList.new $2).parse %w(alt width)
+            image_attrs = (::Asciidoctor::AttributeList.new $2).parse %w(alt width)
             image_path = $1
             image_relative_to = true
           end
@@ -4269,11 +4315,11 @@ module Asciidoctor
         end
         @tmp_files ||= {}
         # NOTE: base64 logic currently used for inline images
-        if ::Base64 === image_path
+        if ::Asciidoctor::Image::Base64Encoded === image_path
           return @tmp_files[image_path] if @tmp_files.key? image_path
           tmp_image = ::Tempfile.create %W(image- .#{image_format})
           tmp_image.binmode unless image_format == 'svg'
-          tmp_image.write ::Base64.decode64 image_path
+          tmp_image.write image_path.unpack1 'm'
           tmp_image.close
           @tmp_files[image_path] = tmp_image.path
         # NOTE: this will catch a classloader resource path on JRuby (e.g., uri:classloader:/path/to/image)
@@ -4351,21 +4397,23 @@ module Asciidoctor
         if (first_page = (has_front_cover ? (pages.slice 1, pages.size) : pages).find {|it| !it.imported_page? }) &&
             (first_page_num = (pages.index first_page) + 1) &&
             (fg_image = resolve_background_image doc, @theme, 'page-foreground-image') && fg_image[0]
-          go_to_page first_page_num
-          create_stamp 'foreground-image' do
-            canvas { image fg_image[0], ({ position: :center, vposition: :center }.merge fg_image[1]) }
-          end
-          stamp 'foreground-image'
-          (first_page_num.next..page_count).each do |num|
+          stamps = ::Set.new
+          (first_page_num..page_count).each do |num|
             go_to_page num
-            stamp 'foreground-image' unless page.imported_page?
+            next if page.imported_page?
+            unless stamps.include? (stamp_name = %(foreground-image-#{page.layout}))
+              create_stamp stamp_name do
+                canvas { image fg_image[0], ({ position: :center, vposition: :center }.merge fg_image[1]) }
+              end
+              stamps << stamp_name
+            end
+            stamp stamp_name
           end
         end
       end
 
       def start_new_chapter chapter
         start_new_page unless at_page_top?
-        # TODO: must call update_colors before advancing to next page if start_new_page is called in ink_chapter_title
         start_new_page if @ppbook && verso_page? && !(chapter.option? 'nonfacing')
       end
 
@@ -4892,7 +4940,7 @@ module Asciidoctor
       end
 
       def init_float_box _node, block_width, block_height, float_to
-        gap = ::Array === (gap = @theme.image_float_gap) ? gap.dup : [gap, gap]
+        gap = ::Array === (gap = @theme.image_float_gap) ? (gap.drop 0) : [gap, gap]
         float_w = block_width + (gap[0] ||= 12)
         float_h = block_height + (gap[1] ||= 6)
         box_l = bounds.left + (float_to == 'right' ? 0 : float_w)
@@ -5043,6 +5091,10 @@ module Asciidoctor
         ink_caption node, category: :image, end: :bottom if node.title?
         theme_margin :block, :bottom, (next_enclosed_block node) unless opts[:pinned]
         nil
+      end
+
+      def page_color_space
+        page.graphic_state.color_space
       end
 
       def remove_tmp_files

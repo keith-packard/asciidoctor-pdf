@@ -1,18 +1,31 @@
 = AsciiDoc Attributes for PDF
 
-Asciidoctor PDF supports additional built-in document attributes that impact PDF conversion.
-You can use these attributes to control the PDF media, launch mode, and outline, PDF optimization, text hyphenation, and various document-specific theme settings such as the front and back cover images, the background images, the title page logo and background images, page dimensions, and more.
+Asciidoctor PDF supports additional built-in document attributes that are used by the PDF converter.
+These attributes can control certain aspects of PDF rendering, such as the PDF media, launch mode, outline, optimization, text hyphenation, as well as some document-specific theme settings such as the front and back cover images, the background images, the title page logo and background images, page dimensions, and more.
 
-== AsciiDoc document attributes
+== Relationship to theme
 
-If an attribute is marked as "Header Only", it only takes effect if defined in the AsciiDoc document header or via the API.
-If an attribute matches a key in the theme file, the document attribute takes precedence.
+The theme-oriented attributes overlap with settings controlled by the xref:theme:index.adoc[PDF theme].
+These attributes are not meant to be a replacement for the theming system.
+Rather, they're provided as a convenience to control some theme settings that are frequently changed per document or conversion and thus warrant an override.
+
+For maximum control over the theming (aka branding) of the PDF, you'll want to use a xref:theme:index.adoc[theme].
+You can either create the theme anew or xref:theme:create-theme.adoc#extend-default[extend from a built-in theme].
+Once you've created a theme, you'll need to xref:theme:apply-theme.adoc[apply it] when converting the document.
+
+If an AsciiDoc attribute for PDF correlates to a key in the theme file, the AsciiDoc attribute always takes precedence.
+
+[#asciidoc-document-attributes]
+== Reference
+
+If an attribute is marked as "Header Only", it only takes effect if defined by the end of the AsciiDoc document header.
+This designation includes attributes that are set via the API or CLI.
 
 [cols="2,3,^1,6a"]
 |===
 |Attribute |Value Type |Header Only |Example
 
-|`autofit-option`
+|xref:autofit-text.adoc[autofit-option]
 |flag (default: _not set_)
 |No
 |`:autofit-option:`
@@ -53,7 +66,7 @@ If an attribute matches a key in the theme file, the document attribute takes pr
 |Yes
 |`:compress:`
 
-|`optimize`
+|xref:optimize-pdf.adoc[optimize]
 |`screen` {vbar} `ebook` {vbar} `printer` {vbar} `prepress` {vbar} `default` (default: `default`)
 |Yes
 |`:optimize: prepress`
@@ -169,9 +182,9 @@ If an attribute matches a key in the theme file, the document attribute takes pr
 3. The target of the image macro is resolved relative to `imagesdir` since it's defined in the AsciiDoc document (unlike in the theme, where it is resolved relative to the value of `pdf-themesdir`).
 4. Enables generation of the https://milan.kupcevic.net/ghostscript-ps-pdf/#marks[pdfmark^] file, which contains metadata that can be fed to Ghostscript when optimizing the PDF file.
 If you're using Ghostscript >= 8.54, this feature is not needed.
-5. Activates hyphenation for the language code specified (defaults to en_us).
+5. Activates hyphenation for the language code specified (defaults to en_us) if the `text-hyphen` gem is available.
 If the `hyphens` attribute is set in the document, it overrides the `base-hyphens` key set in the theme.
-In other case, if the value is empty, then the value of the `lang` document attribute is used for the hyphenation language.
+In either case, if the value is empty, then the value of the `lang` document attribute is used as the hyphenation language.
 6. Activates line break rules for CJK languages (specifically Chinese and Japanese).
 Chinese and Japanese are written without spaces (and may not use spaces when mixing with English words either).
 This setting allows a line break to be placed between any two CJK characters to accommodate wrapping.

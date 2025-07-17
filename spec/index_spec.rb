@@ -76,9 +76,15 @@ describe 'Asciidoctor::PDF::Converter - Index' do
 
     [index]
     == Index
+
+    [glossary]
+    == Glossary
     EOS
 
+    (expect pdf.pages).to have_size 4
     (expect (pdf.page 2).text).not_to include 'Index'
+    (expect (pdf.page 2).text).to include 'Glossary'
+    (expect (pdf.page 4).text).to include 'Glossary'
   end
 
   it 'should add the index entries to the section with the index style' do
@@ -508,6 +514,65 @@ describe 'Asciidoctor::PDF::Converter - Index' do
     (expect terms).to eql %w(anchor AsciiDoc Asciidoctor authoring)
   end
 
+  it 'should adjust start page number for prepress book when page numbering starts at toc and toc macro is used' do
+    pdf = to_pdf <<~'EOS', pdf_theme: { page_numbering_start_at: 'toc' }, analyze: true
+    = Book Title
+    :doctype: book
+    :media: prepress
+    :toc: macro
+
+    [dedication]
+    = Dedication
+
+    Credit where credit is due.
+
+    toc::[]
+
+    == First Chapter
+
+    ((apples))
+
+    == Second Chapter
+
+    ((bananas))
+
+    [index]
+    == Index
+    EOS
+
+    index_title_text = (pdf.find_text 'Index')[-1]
+    (expect index_title_text[:page_number]).to be 11
+    index_lines = pdf.lines pdf.find_text page_number: 11
+    (expect index_lines).to eql ['Index', 'A', 'apples, 3', 'B', 'bananas, 5']
+  end
+
+  it 'should adjust start page number for prepress book when page numbering starts after-toc and toc macro is used' do
+    pdf = to_pdf <<~'EOS', pdf_theme: { page_numbering_start_at: 'after-toc' }, analyze: true
+    = Book Title
+    :doctype: book
+    :media: prepress
+    :toc: macro
+
+    toc::[]
+
+    == First Chapter
+
+    ((apples))
+
+    == Second Chapter
+
+    ((bananas))
+
+    [index]
+    == Index
+    EOS
+
+    index_title_text = (pdf.find_text 'Index')[-1]
+    (expect index_title_text[:page_number]).to be 9
+    index_lines = pdf.lines pdf.find_text page_number: 9
+    (expect index_lines).to eql ['Index', 'A', 'apples, 1', 'B', 'bananas, 3']
+  end
+
   it 'should start with no categories' do
     index = Asciidoctor::PDF::IndexCatalog.new
     (expect index).to be_empty
@@ -926,6 +991,66 @@ describe 'Asciidoctor::PDF::Converter - Index' do
     (expect s_category_text).not_to be_nil
     (expect d_category_text[:x]).to eql 72.0
     (expect s_category_text[:x]).to eql 36.0
+  end
+
+  # this happens if the term sits right on the page boundary and the hanging indent is still active
+  it 'should preserve indentation when recreating column box on subsequent pages' do
+    pdf_theme = {
+      page_margin: [50, 54],
+      page_margin_inner: 72,
+      page_margin_outer: 36,
+    }
+    pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, analyze: true
+    = Document Title
+    :doctype: book
+    :media: prepress
+    :notitle:
+    :pdf-page-size: A5
+
+    == Chapter
+
+    ((foo)) and ((bar))
+
+    ((yin)) and ((yang))
+
+    ((tea)) and ((coffee))
+
+    ((left)) and ((right))
+
+    ((salt)) and ((pepper))
+
+    ((up)) and ((down))
+
+    ((sugar)) and ((spice))
+
+    ((day)) and ((night))
+
+    ((melody)) and ((harmony))
+
+    ((inside)) and ((outside))
+
+    ((forward)) and ((back))
+
+    ((cake)) and ((icing))
+
+    ((to that place where you wish to go)) and ((fro))
+
+    ((apples)) and ((oranges))
+
+    ((over)) and ((under))
+
+    ((light)) and ((dark))
+
+    [index]
+    == Index
+    EOS
+
+    wrapped_text = pdf.find_unique_text 'to go, 1', page_number: 4
+    (expect wrapped_text).not_to be_nil
+    (expect wrapped_text[:x]).to eql 66.0
+    u_category_text = pdf.find_unique_text 'U', page_number: 4
+    (expect u_category_text).not_to be_nil
+    (expect u_category_text[:x]).to eql 36.0
   end
 
   it 'should preserve column count on subsequent pages' do

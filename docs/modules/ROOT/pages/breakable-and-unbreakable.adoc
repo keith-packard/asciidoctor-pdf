@@ -40,7 +40,7 @@ Since these blocks are already breakable by default, this option is merely a pub
 
 === Table
 
-The `breakable` option can be applied to a table to ensure the anchor and title are kept with the table if the table gets advanced to the next page.
+The `breakable` option can be applied to a table to ensure the anchor and title (i.e., caption) are kept with the table if the table gets advanced to the next page.
 
 [,asciidoc]
 ----
@@ -54,6 +54,10 @@ The `breakable` option can be applied to a table to ensure the anchor and title 
 ----
 <.> Assign the `breakable` option to a table, using the shorthand percent symbol (`%`) for the `option` attribute name, to indicate that the table's title and anchor should be kept with the table.
 
+The behavior to keep the title with the table is _only_ supported if the table caption is in its default end placement above the table (i.e., `top`).
+If the theme configures the caption end placement (`table-caption-end`) below the table (i.e., `bottom`), the title could be widowed on the next page.
+The lack of widow prevention for the title when placed below the table is due to a limitation in how this converter is implemented.
+
 [#section-or-discrete-heading]
 === Section or discrete heading
 
@@ -62,7 +66,7 @@ The `breakable` option can be applied to a section to ensure the section title i
 [,asciidoc]
 ----
 [%breakable]
-=== Title of a section
+=== Title of Section
 
 First block of content in the section.
 ----
@@ -72,7 +76,7 @@ This option can also be added to a discrete heading to ensure the heading is kep
 [,asciidoc]
 ----
 [discrete%breakable]
-=== Discrete heading
+=== Discrete Heading
 
 Next block of content.
 ----
@@ -82,7 +86,24 @@ In other words, the option prevents a page break immediately following the title
 Instead, the page break will come _before_ the title.
 This option does not make the converter attempt to keep an entire section on the same page.
 
-If you want to enable this feature for all sections and discrete headings, you can set the `heading-min-height-after` theme key to `auto` instead.
+However, you can get the section title to stick with more than one block by wrapping the blocks that follow it in an unbreakable block.
+
+[,asciidoc]
+----
+[%breakable]
+=== Title of Section
+
+[%unbreakable]
+--
+First block of content in the section.
+
+Second block of content in the section.
+--
+----
+
+In this case, the section will follow the unbreakable block if it gets advanced to the next page.
+
+If you want to prevent all sections and discrete headings from being orphaned globally, you can set the `heading-min-height-after` theme key to `auto` instead.
 
 [,yaml]
 ----
@@ -173,4 +194,7 @@ Orphan prevents adds almost as many since it's a similar process.
 Doing that by default for tables, sections, and discrete headings would be too complex and costly.
 To recoup some of the processing time, we decided to make some trade-offs.
 Therefore, blocks are breakable by default and authors must opt-in to get orphan prevention for tables, sections, and discrete headings.
+
+However, you can add the `breakable` (or `unbreakable` option) to any block at runtime using an Asciidoctor extension.
+Refer to xref:extend:use-cases.adoc#breakable-tables[breakable tables] to find the code for this extension.
 ****

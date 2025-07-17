@@ -230,7 +230,7 @@ describe 'Asciidoctor::PDF::Converter - Title Page' do
 
     it 'should add logo specified by title-logo-image document attribute with data URI to title page' do
       image_data = File.binread fixture_file 'tux.png'
-      encoded_image_data = Base64.strict_encode64 image_data
+      encoded_image_data = [image_data].pack 'm0'
       image_url = %(image:data:image/jpg;base64,#{encoded_image_data}[])
       pdf = to_pdf <<~EOS
       = Document Title
@@ -672,6 +672,19 @@ describe 'Asciidoctor::PDF::Converter - Title Page' do
       (expect title_page_lines).to eql ['Document Title', 'Doc', 'Writer']
     end
 
+    it 'should allow author name and email to be placed on separate lines' do
+      pdf = to_pdf <<~'EOS', pdf_theme: { title_page_authors_content_with_email: %({author} +\n{email}) }, analyze: true
+      = Document Title
+      Doc Writer <doc@example.org>
+      :doctype: book
+
+      body
+      EOS
+
+      title_page_lines = pdf.lines pdf.find_text page_number: 1
+      (expect title_page_lines).to eql ['Document Title', 'Doc Writer', 'doc@example.org']
+    end
+
     it 'should allow theme to customize content of authors line by available metadata' do
       pdf_theme = {
         title_page_authors_content_name_only: '{authorinitials}',
@@ -754,7 +767,11 @@ describe 'Asciidoctor::PDF::Converter - Title Page' do
     end
 
     it 'should add logo specified by title_page_logo_image theme key to title page' do
-      pdf = to_pdf <<~'EOS', pdf_theme: { title_page_logo_image: 'image:{docdir}/tux.png[]' }, attribute_overrides: { 'docdir' => fixtures_dir }
+      pdf_theme = {
+        __dir__: fixtures_dir,
+        title_page_logo_image: 'image:tux.png[]',
+      }
+      pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, attribute_overrides: { 'docdir' => fixtures_dir }
       = Document Title
       :doctype: book
       EOS
@@ -763,6 +780,22 @@ describe 'Asciidoctor::PDF::Converter - Title Page' do
       (expect images).to have_size 1
       (expect images[0].hash[:Width]).to be 204
       (expect images[0].hash[:Height]).to be 240
+    end
+
+    it 'should use title page logo image if specified as absolute path' do
+      %w({docdir}/tux.png image:{docdir}/tux.png[]).each do |title_page_logo_image|
+        pdf_theme = { title_page_logo_image: title_page_logo_image }
+
+        pdf = to_pdf <<~'EOS', pdf_theme: pdf_theme, attribute_overrides: { 'docdir' => fixtures_dir }
+        = Document Title
+        :doctype: book
+        EOS
+
+        images = get_images pdf, 1
+        (expect images).to have_size 1
+        (expect images[0].hash[:Width]).to be 204
+        (expect images[0].hash[:Height]).to be 240
+      end
     end
 
     it 'should resolve title page logo image specified using path in theme relative to themesdir' do
@@ -834,7 +867,7 @@ describe 'Asciidoctor::PDF::Converter - Title Page' do
 
     it 'should add logo specified by title-logo-image document attribute with data URI to title page' do
       image_data = File.binread fixture_file 'tux.png'
-      encoded_image_data = Base64.strict_encode64 image_data
+      encoded_image_data = [image_data].pack 'm0'
       image_url = %(image:data:image/jpg;base64,#{encoded_image_data}[])
       pdf = to_pdf <<~'EOS', pdf_theme: { title_page_logo_image: image_url }
       = Document Title

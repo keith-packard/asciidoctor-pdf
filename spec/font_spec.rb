@@ -37,6 +37,20 @@ describe 'Asciidoctor::PDF::Converter - Font' do
       (expect to_file).to visually_match 'font-glyph-fallback-only.pdf'
     end
 
+    it 'should resolve glyph in fallback font when styles are inherited', visual: true do
+      input = <<~'EOS'
+      |===
+      |&#x2611; For | &#x2610; Against
+
+      |Tastes great
+      |High in sugar
+      |===
+      EOS
+
+      to_file = to_pdf_file input, 'fallback-font-inherited-styles.pdf', attribute_overrides: { 'pdf-theme' => 'default-with-font-fallbacks' }
+      (expect to_file).to visually_match 'fallback-font-inherited-styles.pdf'
+    end
+
     it 'should use notdef from original font of glyph not found in any fallback font', visual: true do
       input = ?\u0278 * 10
       to_file = to_pdf_file input, 'font-notdef-glyph.pdf', attribute_overrides: { 'pdf-theme' => 'default-with-font-fallbacks' }
@@ -72,6 +86,28 @@ describe 'Asciidoctor::PDF::Converter - Font' do
       text = (pdf.find_text ?\u03a9)[0]
       (expect text).not_to be_nil
       (expect text[:font_name]).to eql 'NotoSerif-Bold'
+    end
+
+    it 'should not look for NUL glyph in fallback font when missing from primary font' do
+      pdf_theme = {
+        extends: 'default',
+        font_catalog: {
+          'Noto Serif' => {
+            'normal' => 'notoserif-regular-subset.ttf',
+          },
+          'M+ 1p Fallback' => {
+            'normal' => 'mplus1p-regular-fallback.ttf',
+          },
+        },
+        base_font_family: 'M+ 1p Fallback',
+        font_fallbacks: ['Noto Serif'],
+      }
+      input = '. [[L1]]List item with anchor'
+      pdf = to_pdf input, analyze: true, pdf_theme: pdf_theme
+      marker, text = pdf.text
+      (expect marker[:font_name]).to eql 'mplus-1p-regular'
+      (expect text[:font_name]).to eql 'mplus-1p-regular'
+      (expect marker[:y]).to eql text[:y]
     end
 
     it 'should include box drawing glyphs in bundled monospace font', visual: true do
@@ -147,14 +183,14 @@ describe 'Asciidoctor::PDF::Converter - Font' do
   end
 
   context 'OTF' do
-    it 'should allow theme to specify an OTF font', visual: true do
+    it 'should allow theme to specify an OTF font', unless: (Gem::Version.new RUBY_VERSION) < (Gem::Version.new '2.7.0'), visual: true, &(proc do
       to_file = to_pdf_file <<~'EOS', 'font-otf.pdf', enable_footer: true, attribute_overrides: { 'pdf-theme' => (fixture_file 'otf-theme.yml'), 'pdf-fontsdir' => fixtures_dir }
       == OTF
 
       You're looking at an OTF font!
       EOS
       (expect to_file).to visually_match 'font-otf.pdf'
-    end
+    end)
   end
 
   context 'custom' do

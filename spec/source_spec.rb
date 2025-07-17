@@ -225,14 +225,20 @@ describe 'Asciidoctor::PDF::Converter - Source' do
       ----
       EOS
 
+      to_pdf input
+
+      expected_file = (Gem::Version.new Rouge.version) >= (Gem::Version.new '4.1.0') ?
+        'source-rouge-style-with-highlighted-method-name.pdf' :
+        'source-rouge-style.pdf'
+
       to_file = to_pdf_file input, 'source-rouge-style.pdf'
-      (expect to_file).to visually_match 'source-rouge-style.pdf'
+      (expect to_file).to visually_match expected_file
 
       to_file = to_pdf_file input, 'source-rouge-style.pdf', attribute_overrides: { 'rouge-style' => (Rouge::Theme.find 'molokai').new }
-      (expect to_file).to visually_match 'source-rouge-style.pdf'
+      (expect to_file).to visually_match expected_file
 
       to_file = to_pdf_file input, 'source-rouge-style.pdf', attribute_overrides: { 'rouge-style' => (Rouge::Theme.find 'molokai') }
-      (expect to_file).to visually_match 'source-rouge-style.pdf'
+      (expect to_file).to visually_match expected_file
     end
 
     it 'should disable highlighting instead of crashing if lexer fails to lex source' do
@@ -294,10 +300,10 @@ describe 'Asciidoctor::PDF::Converter - Source' do
       end
     end
 
-    it 'should allow token to be formatted in bold and italic' do
+    it 'should allow token to be formatted in bold, italic, and bold italic' do
       pdf = to_pdf <<~'EOS', analyze: true
       :source-highlighter: rouge
-      :rouge-style: github
+      :rouge-style: monokai
 
       [source,d]
       ----
@@ -306,9 +312,15 @@ describe 'Asciidoctor::PDF::Converter - Source' do
       ----
       EOS
 
+      line_text = pdf.find_unique_text 'int'
+      (expect line_text).not_to be_nil
+      (expect line_text[:font_name]).to eql 'mplus1mn-bold'
       line_text = pdf.find_unique_text %r/^#line 6 /
-      (expect line_text).not_to be_empty
+      (expect line_text).not_to be_nil
       (expect line_text[:font_name]).to eql 'mplus1mn-bold_italic'
+      if (line_text = pdf.find_unique_text %r/^\/\/ this is now /)
+        (expect line_text[:font_name]).to eql 'mplus1mn-italic'
+      end
     end
 
     it 'should allow token to add underline style to token', visual: true do
@@ -1212,6 +1224,20 @@ describe 'Asciidoctor::PDF::Converter - Source' do
       (expect attr_name_text).not_to be_nil
       (expect attr_name_text[:font_color]).to eql '4F9FCF'
       (expect (pdf.find_text '①')[0]).not_to be_nil
+    end
+
+    it 'should not crash if source highlighter is enabled and subs is set on empty block' do
+      (expect do
+        input = <<~'EOS'
+        [source,ruby,subs=attributes+]
+        ----
+        ----
+        EOS
+        lines = (to_pdf input, attribute_overrides: { 'source-highlighter' => 'coderay' }, analyze: :line).lines
+        text = (to_pdf input, attribute_overrides: { 'source-highlighter' => 'coderay' }, analyze: true).text
+        (expect (lines[0][:from][:y] - lines[1][:from][:y]).abs).to be < 5
+        (expect text).to be_empty
+      end).not_to raise_exception
     end
   end
 

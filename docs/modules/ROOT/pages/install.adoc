@@ -9,17 +9,20 @@ You can also find some troubleshooting advice if the installation goes wrong.
 == Prerequisites
 
 Asciidoctor PDF is a Ruby application.
-Therefore, to use it, you'll need a Ruby runtime.
+Therefore, you'll need a Ruby runtime to run it.
 
-The supported Ruby runtimes are Ruby 2.7 or greater and JRuby 9.2 or greater.
-However, we always recommend using the most recent release of Ruby or JRuby.
-All required libraries (i.e., gems) will be installed automatically when you install Asciidoctor PDF, which will be covered in the <<Install Asciidoctor PDF,next section>>.
+The Ruby versions on which Asciidoctor PDF is supported {url-project-repo}/blob/{page-origin-refname}/.github/workflows/ci.yml[and tested] are Ruby 2.7 or greater or JRuby 9.2 or greater.
+We always recommend using the most recent version of Ruby or JRuby, if possible.
+If you attempt to use an unsupported version of Ruby with Asciidoctor PDF, the conversion will likely fail in unexpected ways.
+
+All required libraries (i.e., gems) will be installed automatically when you install Asciidoctor PDF, which is covered in the <<Install Asciidoctor PDF,next section>>.
+You must install any <<optional-dependencies,optional dependencies>> yourself in order to activate the corresponding optional features.
 
 To check if you have Ruby available, run the `ruby` command to print the installed version:
 
  $ ruby -v
 
-Make sure this command reports a Ruby version that starts with 2.7 (or a JRuby version that starts with 9.2).
+Make sure this command reports a Ruby version that starts with at least 2.7 (or a JRuby version that starts with at least 9.2).
 If so, you're ready to proceed.
 If not, head over to {url-rvm}[rvm.io^] to get RVM and use it to install Ruby.
 
@@ -28,19 +31,13 @@ If not, head over to {url-rvm}[rvm.io^] to get RVM and use it to install Ruby.
 Asciidoctor assumes you're using UTF-8 encoding.
 To minimize encoding problems, make sure the default encoding of your system is set to UTF-8.
 
-If you're using a non-English Windows environment, the default encoding of your system may not be UTF-8.
-As a result, you may get an `Encoding::UndefinedConversionError` or other encoding issues when invoking Asciidoctor.
-To solve these problems, we recommend at least changing the active code page in your console to UTF-8.
-
- chcp 65001
-
-Once you make this change, all your Unicode headaches will be behind you.
+See the xref:asciidoctor:install:supported-platforms.adoc#system-encoding[system encoding] requirements section to learn how to override the default character encodings when using Asciidoctor if you can't modify your system encoding.
 
 == Install Asciidoctor PDF
 
 Asciidoctor PDF (gem: *asciidoctor-pdf*, command: `asciidoctor-pdf`) is published as a RubyGem to the rubygems.org software registry.
 You install Asciidoctor PDF from that registry using the RubyGem management tools provided by Ruby (`bundle` or `gem`).
-Alternately, you can {url-project-repo}/blob/main/CONTRIBUTING-CODE.adocl[build and install Asciidoctor PDF from source^].
+Alternately, you can {url-project-repo}/blob/main/CONTRIBUTING-CODE.adoc[build and install Asciidoctor PDF from source^].
 
 Refer to the table below for instructions on how to install Asciidoctor PDF.
 If you use Bundler to manage your gems in a [.path]_Gemfile_, add the entry listed in the *Bundler* column.
@@ -152,6 +149,11 @@ _asciidoctor-diagram_
 | 2.2.0
 | Diagram blocks (must be required using `-r asciidoctor-diagram`)
 
+| *Asciidoctor Kroki* +
+_asciidoctor-kroki_
+| 0.8.0
+| Diagram blocks (must be required using `-r asciidoctor-kroki`)
+
 | *Rouge* +
 _rouge_
 | 2.0.0
@@ -174,7 +176,8 @@ _prawn-gmagick_
 
 | *RGhost* +
 _rghost_
-| 0.9.7
+| 0.9.7 +
+(avoid 0.9.8)
 | PDF optimization using Ghostscript (requires `optimize` attribute to be set)
 
 | *Text Hyphen* +

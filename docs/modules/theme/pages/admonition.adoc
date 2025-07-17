@@ -16,7 +16,7 @@ The keys in the `admonition` category control the arrangement and style of admon
 |xref:color.adoc[Color] +
 (default: _not set_)
 |[source]
-admontition:
+admonition:
   background-color: #757575
 
 |border-color
@@ -290,7 +290,8 @@ In other words, the `icon` category _cannot_ be declared multiple times and its 
 
 A font-based icon is placed in a container with a width 1.5 times the size of the icon.
 This is done to give the icon more padding than the textual label.
-This behavior will be configurable starting in Asciidoctor PDF 3.
+This behavior can be overridden by assigning a value to the `label-min-width` key, which becomes the width of the container for the icon.
+A more direct way of configuring the width of this container will be available in Asciidoctor PDF 3.
 
 The `image` key is only relevant when image-based icons are used (`icons=image`).
 It's an alternative to using the `icon` attribute on the admonition block.
@@ -338,7 +339,7 @@ admonition:
       stroke-color: #FF0000
 |===
 
-[#name]
+[#icon]
 === Identifying an icon
 
 The `name` key assigned to a built-in admonition only accepts a value in the format of <icon set>-<icon name>`.
@@ -346,3 +347,18 @@ A value is always required when assigning an icon to a built-in admonition.
 See the `.yml` files in the https://github.com/jessedoyle/prawn-icon/tree/master/data/fonts[prawn-icon repository^] for a list of valid icon names.
 The prefix (e.g., `fas-`) of the value determines which font set to use.
 If the prefix is not specified, `fa-` is assumed.
+
+[#name]
+== admonition-<name>
+
+Asciidoctor PDF does not currently support theming admonitions by name (i.e., type).
+In other words, the theming system doesn't provide the `admonition-<name>` category key, where `<name>` is the admonition name (e.g., note, tip, etc).
+That means it's not possible to apply a background color to one admonition type, such as NOTE, without applying it to all admonitions.
+However, it is possible to extend Asciidoctor PDF to add this capability.
+
+In order to add support for the `admonition-<name>` category key to the theming system, you need to create an extended converter.
+That converter will intercept requests to convert an admonition and temporarily promote settings on the `admonition-<name>` category key to the `admonition` category key.
+Once the admonition is converted (i.e., rendered), the original theme settings will be restored.
+
+You can find the details of this extended converter in the xref:extend:use-cases.adoc#theme-admonition-per-type[theme admonition per type] use case on the xref:extend:use-cases.adoc[] page.
+To apply the extension, refer to xref:extend:use-converter.adoc[].
