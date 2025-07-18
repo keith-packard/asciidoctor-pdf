@@ -5,7 +5,7 @@ Maintainer: Keith Packard <keithp@keithp.com>
 Uploaders: Lucas Kanashiro <kanashiro@debian.org>
 Build-Depends: debhelper-compat (= 13),
                gem2deb,
-               ruby (>= 1:2.5.1),
+               ruby:native (>= 1:2.5.1),
                ruby-asciidoctor (>= 2.0),
                ruby-concurrent (>= 1.1~),
                ruby-prawn (>= 2.4.0),
@@ -33,9 +33,20 @@ Depends: ruby (>= 1:2.5.1),
 	 ruby-prawn-icon (>= 3.0.0),
 	 ruby-prawn-svg (>= 0.32.0),
 	 ruby-prawn-table (>= 0.2.0),
+   ruby-rghost (>= 0.9.9),
 	 ruby-treetop (>= 1.6.0),
          ${misc:Depends}
 Suggests: ruby-rouge
-Description: Converts AsciiDoc documents to PDF using Prawn
+Description: Ruby module for converting AsciiDoc documents to PDF using Prawn
+ A ruby module providing an extension for Asciidoctor that converts
+ AsciiDoc documents to PDF using the Prawn PDF library.
+
+Package: asciidoctor-pdf
+Architecture: all
+Multi-Arch: foreign
+Depends:
+  ruby,
+  ruby-asciidoctor-pdf (= ${binary:Version}),
+  ${misc:Depends},
+Description: Converts AsciiDoc documents to PDF
  An extension for Asciidoctor that converts AsciiDoc documents to PDF
- using the Prawn PDF library.

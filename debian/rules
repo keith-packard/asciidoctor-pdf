@@ -1,6 +1,7 @@
 #!/usr/bin/make -f
 
 export GEM2DEB_TEST_RUNNER = --check-dependencies
+export DH_RUBY_USE_DH_AUTO_INSTALL_DESTDIR = true
 
 %:
 	dh $@ --buildsystem=ruby --with ruby
