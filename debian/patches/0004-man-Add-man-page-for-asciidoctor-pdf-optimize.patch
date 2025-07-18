@@ -1,0 +1,178 @@
+From: Keith Packard <keithp@keithp.com>
+Date: Fri, 18 Jul 2025 18:34:33 +0200
+Subject: man: Add man page for asciidoctor-pdf-optimize
+
+Signed-off-by: Keith Packard <keithp@keithp.com>
+---
+ man/asciidoctor-pdf-optimize.1    | 92 +++++++++++++++++++++++++++++++++++++++
+ man/asciidoctor-pdf-optimize.adoc | 61 ++++++++++++++++++++++++++
+ 2 files changed, 153 insertions(+)
+ create mode 100644 man/asciidoctor-pdf-optimize.1
+ create mode 100644 man/asciidoctor-pdf-optimize.adoc
+
+diff --git a/man/asciidoctor-pdf-optimize.1 b/man/asciidoctor-pdf-optimize.1
+new file mode 100644
+index 0000000..88589eb
+--- /dev/null
++++ b/man/asciidoctor-pdf-optimize.1
+@@ -0,0 +1,92 @@
++'\" t
++.\"     Title: asciidoctor-pdf-optimize
++.\"    Author: Dan Allen, Sarah White, Ryan Waldron
++.\" Generator: Asciidoctor 2.0.23
++.\"      Date: 2025-07-18
++.\"    Manual: Asciidoctor Optimize Manual
++.\"    Source: Asciidoctor Optimize 1.5.8
++.\"  Language: English
++.\"
++.TH "ASCIIDOCTOR\-PDF\-OPTIMIZE" "1" "2025-07-18" "Asciidoctor Optimize 1.5.8" "Asciidoctor Optimize Manual"
++.ie \n(.g .ds Aq \(aq
++.el       .ds Aq '
++.ss \n[.ss] 0
++.nh
++.ad l
++.de URL
++\fI\\$2\fP <\\$1>\\$3
++..
++.als MTO URL
++.if \n[.g] \{\
++.  mso www.tmac
++.  am URL
++.    ad l
++.  .
++.  am MTO
++.    ad l
++.  .
++.  LINKSTYLE blue R < >
++.\}
++.SH "NAME"
++asciidoctor-pdf-optimize \- optimize asciidoctor\-pdf generated PDF files
++.SH "SYNOPSIS"
++.sp
++\fBasciidoctor\-pdf\-optimize\fP [\fIOPTION\fP]... \fIFILE\fP...
++.SH "DESCRIPTION"
++.sp
++The asciidoctor\-pdf\-optimize(1) command optimizes PDF files generated
++by asciidoctor\-pdf.
++.SH "OPTIONS"
++.sp
++\fB\-\-quality\fP=\fIQUALITY\fP
++.RS 4
++Sets the image compression quality in the conversion.
++.RE
++.SH "EXIT STATUS"
++.sp
++\fB0\fP
++.RS 4
++Success.
++.RE
++.sp
++\fB1\fP
++.RS 4
++Failure (syntax or usage error; configuration error; document processing failure; unexpected error).
++.RE
++.SH "BUGS"
++.sp
++Refer to the \fBAsciidoctor\fP issue tracker at \c
++.URL "https://github.com/asciidoctor/asciidoctor/issues?q=is%3Aopen" "" "."
++.SH "AUTHORS"
++.sp
++\fBAsciidoctor\-pdf\-optimize\fP was written by Dan Allen, Ryan Waldron, Jason Porter, Nick Hengeveld and other contributors.
++.sp
++\fBAsciidoctor\-pdf\fP was written by Dan Allen, Ryan Waldron, Jason Porter, Nick Hengeveld and other contributors.
++.sp
++\fBAsciidoctor\fP was written by Dan Allen, Ryan Waldron, Jason Porter, Nick Hengeveld and other contributors.
++.sp
++\fBAsciiDoc\fP was written by Stuart Rackham and has received contributions from many other individuals.
++.SH "RESOURCES"
++.sp
++\fBProject web site:\fP \c
++.URL "https://asciidoctor.org" "" ""
++.sp
++\fBGit source repository on GitHub:\fP \c
++.URL "https://github.com/asciidoctor/asciidoctor\-pdf" "" ""
++.sp
++\fBGitHub organization:\fP \c
++.URL "https://github.com/asciidoctor" "" ""
++.sp
++\fBDiscussion list / forum:\fP \c
++.URL "http://discuss.asciidoctor.org" "" ""
++.SH "COPYING"
++.sp
++Copyright (C) 2012\-2018 Dan Allen, Ryan Waldron and the Asciidoctor Project.
++Free use of this software is granted under the terms of the MIT License.
++.SH "AUTHORS"
++.sp
++Dan Allen
++.sp
++Sarah White
++.sp
++Ryan Waldron
+\ No newline at end of file
+diff --git a/man/asciidoctor-pdf-optimize.adoc b/man/asciidoctor-pdf-optimize.adoc
+new file mode 100644
+index 0000000..51fc015
+--- /dev/null
++++ b/man/asciidoctor-pdf-optimize.adoc
+@@ -0,0 +1,61 @@
++= asciidoctor-pdf-optimize(1)
++Dan Allen; Sarah White; Ryan Waldron
++:doctype: manpage
++:man manual: Asciidoctor Optimize Manual
++:man source: Asciidoctor Optimize 1.5.8
++:page-layout: base
++
++== NAME
++
++asciidoctor-pdf-optimize - optimize asciidoctor-pdf generated PDF files
++
++== SYNOPSIS
++
++*asciidoctor-pdf-optimize* [_OPTION_]... _FILE_...
++
++== DESCRIPTION
++
++The asciidoctor-pdf-optimize(1) command optimizes PDF files generated
++by asciidoctor-pdf.
++
++== OPTIONS
++
++*--quality*=_QUALITY_::
++  Sets the image compression quality in the conversion.
++
++== EXIT STATUS
++
++*0*::
++  Success.
++
++*1*::
++  Failure (syntax or usage error; configuration error; document processing failure; unexpected error).
++
++== BUGS
++
++Refer to the *Asciidoctor* issue tracker at https://github.com/asciidoctor/asciidoctor/issues?q=is%3Aopen.
++
++== AUTHORS
++
++*Asciidoctor-pdf-optimize* was written by Dan Allen, Ryan Waldron, Jason Porter, Nick Hengeveld and other contributors.
++
++*Asciidoctor-pdf* was written by Dan Allen, Ryan Waldron, Jason Porter, Nick Hengeveld and other contributors.
++
++*Asciidoctor* was written by Dan Allen, Ryan Waldron, Jason Porter, Nick Hengeveld and other contributors.
++
++*AsciiDoc* was written by Stuart Rackham and has received contributions from many other individuals.
++
++== RESOURCES
++
++*Project web site:* https://asciidoctor.org
++
++*Git source repository on GitHub:* https://github.com/asciidoctor/asciidoctor-pdf
++
++*GitHub organization:* https://github.com/asciidoctor
++
++*Discussion list / forum:* http://discuss.asciidoctor.org
++
++== COPYING
++
++Copyright \(C) 2012-2018 Dan Allen, Ryan Waldron and the Asciidoctor Project.
++Free use of this software is granted under the terms of the MIT License.
