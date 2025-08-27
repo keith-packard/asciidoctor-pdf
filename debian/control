@@ -29,9 +29,8 @@ Depends: ruby (>= 1:2.5.1),
 	 ruby-prawn (>= 2.4.0),
 	 ruby-prawn-templates (>= 0.1.2),
 	 ruby-prawn-icon (>= 3.0.0),
-	 ruby-prawn-svg (>= 0.34.0),
+	 ruby-prawn-svg (>= 0.32.0),
 	 ruby-prawn-table (>= 0.2.0),
-   ruby-rghost (>= 0.9.9),
 	 ruby-treetop (>= 1.6.0),
 	 ruby-ttfunk (>= 1.7.0),
    ${ruby:Depends},
@@ -48,5 +47,7 @@ Depends:
   ruby,
   ruby-asciidoctor-pdf (= ${binary:Version}),
   ${misc:Depends},
+Replaces: ruby-asciidoctor-pdf (<< 2.3.19-1)
+Breaks: ruby-asciidoctor-pdf (<< 2.3.19-1)
 Description: Converts AsciiDoc documents to PDF
  An extension for Asciidoctor that converts AsciiDoc documents to PDF
