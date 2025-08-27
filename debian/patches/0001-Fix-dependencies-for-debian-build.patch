@@ -20,7 +20,7 @@ Forwarded: not-needed
  1 file changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/asciidoctor-pdf.gemspec b/asciidoctor-pdf.gemspec
-index 997e260..2e02e7e 100644
+index 997e260..2eb1d02 100644
 --- a/asciidoctor-pdf.gemspec
 +++ b/asciidoctor-pdf.gemspec
 @@ -36,11 +36,11 @@ Gem::Specification.new do |s|
@@ -34,7 +34,7 @@ index 997e260..2e02e7e 100644
 -  s.add_runtime_dependency 'prawn-svg', '~> 0.34.0'
 -  s.add_runtime_dependency 'prawn-icon', '~> 3.0.0'
 +  s.add_runtime_dependency 'prawn-templates', '~> 0.1'
-+  s.add_runtime_dependency 'prawn-svg', '~> 0.34'
++  s.add_runtime_dependency 'prawn-svg', '>= 0.32'
 +  s.add_runtime_dependency 'prawn-icon', '~> 3.0'
    s.add_runtime_dependency 'concurrent-ruby', '~> 1.1'
    s.add_runtime_dependency 'treetop', '~> 1.6.0'
