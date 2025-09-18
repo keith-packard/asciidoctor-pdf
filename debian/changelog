@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (2.3.19-3) unstable; urgency=medium
+
+  * Add ruby-rghost dependency to support '-a optimize'.
+
+ -- Keith Packard <keithp@keithp.com>  Wed, 17 Sep 2025 20:28:51 -0700
+
 ruby-asciidoctor-pdf (2.3.19-2) unstable; urgency=medium
 
   * fix prawn-svg dependency
