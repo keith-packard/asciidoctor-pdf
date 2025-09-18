@@ -26,6 +26,7 @@ Architecture: all
 Depends: ruby (>= 1:2.5.1),
 	 ruby-asciidoctor (>= 2.0),
 	 ruby-concurrent (>= 1.1~),
+   ruby-rghost (>= 0.9.9),
 	 ruby-prawn (>= 2.4.0),
 	 ruby-prawn-templates (>= 0.1.2),
 	 ruby-prawn-icon (>= 3.0.0),
