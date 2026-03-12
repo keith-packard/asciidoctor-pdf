@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (2.3.24-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- keithp <keithp@keithp.com>  Thu, 12 Mar 2026 12:42:37 -0700
+
 ruby-asciidoctor-pdf (2.3.19-3) unstable; urgency=medium
 
   * Add ruby-rghost dependency to support '-a optimize'.
