@@ -1,6 +1,6 @@
 = Asciidoctor PDF: A native PDF converter for AsciiDoc
 Dan Allen <https://github.com/mojavelinux[@mojavelinux]>; Sarah White <https://github.com/graphitefriction[@graphitefriction]>
-v2.3.19, 2024-10-11
+v2.3.24, 2025-11-15
 // Settings:
 :experimental:
 :idprefix:
@@ -208,3 +208,4 @@ Free use of this software is granted under the terms of the MIT License.
 
 For the full text of the license, see the link:LICENSE[] file.
 Refer to the <<NOTICE.adoc#,NOTICE>> file for information about third-party Open Source software in use.
+endif::[]

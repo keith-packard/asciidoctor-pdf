@@ -2,7 +2,10 @@
 
 proc do
   old_verbose, $VERBOSE = $VERBOSE, nil
-  require 'bigdecimal' # eagerly require bigdecimal without warnings to avoid warning caused by ttfunk 1.7.0
+  begin
+    require 'bigdecimal' # try to eagerly require bigdecimal with warnings off to avoid warning caused by ttfunk 1.7.0
+  rescue Exception # rubocop:disable Lint/SuppressedException,Lint/RescueException
+  end
   $VERBOSE = old_verbose
 end.call
 
@@ -11,7 +14,11 @@ autoload :StringIO, 'stringio'
 autoload :Tempfile, 'tempfile'
 require 'time' unless defined? Time.parse
 require_relative 'pdf/version'
-require 'asciidoctor'
+proc do
+  old_verbose, $VERBOSE = $VERBOSE, nil
+  require 'asciidoctor' # avoid warning in Ruby 3.4 caused by use of logger
+  $VERBOSE = old_verbose
+end.call
 require 'prawn'
 require 'prawn/templates'
 require_relative 'pdf/measurements'
