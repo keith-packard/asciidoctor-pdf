@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (2.3.24-5) unstable; urgency=medium
+
+  * Add autopkgtests
+
+ -- Keith Packard <keithp@keithp.com>  Fri, 13 Mar 2026 14:17:15 -0700
+
 ruby-asciidoctor-pdf (2.3.24-4) unstable; urgency=medium
 
   * Upload with correct authorship
