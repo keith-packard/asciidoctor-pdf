@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (2.3.24-2) unstable; urgency=medium
+
+  * Previous release resolved FTBFS issue. (Closes: #1120212).
+
+ -- keithp <keithp@keithp.com>  Thu, 12 Mar 2026 21:03:31 -0700
+
 ruby-asciidoctor-pdf (2.3.24-1) unstable; urgency=medium
 
   * New upstream version.
