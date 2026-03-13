@@ -1,3 +1,9 @@
+ruby-asciidoctor-pdf (2.3.24-4) unstable; urgency=medium
+
+  * Upload with correct authorship
+
+ -- Keith Packard <keithp@keithp.com>  Fri, 13 Mar 2026 13:56:06 -0700
+
 ruby-asciidoctor-pdf (2.3.24-3) unstable; urgency=medium
 
   * This release *also* works again. (Closes: #1122092).
