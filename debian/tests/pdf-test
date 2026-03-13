@@ -1,0 +1,4 @@
+#!/bin/sh
+asciidoctor-pdf --destination-dir=/tmp debian/tests/test-file.adoc
+pdftotext /tmp/test-file.pdf /tmp/test-file.txt
+diff -u debian/tests/test-file.txt /tmp/test-file.txt
