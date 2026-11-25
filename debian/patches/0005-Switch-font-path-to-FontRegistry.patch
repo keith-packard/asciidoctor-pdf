@@ -1,0 +1,21 @@
+From: Keith Packard <keithp@keithp.com>
+Date: Wed, 25 Nov 2026 08:45:27 -0800
+Subject: Switch font path to FontRegistry
+
+This appears to have moved for Prawn SVG 1.0.0
+
+Signed-off-by: Keith Packard <keithp@keithp.com>
+---
+ lib/asciidoctor/pdf/ext/prawn-svg.rb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/asciidoctor/pdf/ext/prawn-svg.rb b/lib/asciidoctor/pdf/ext/prawn-svg.rb
+index 4059781..84829b7 100644
+--- a/lib/asciidoctor/pdf/ext/prawn-svg.rb
++++ b/lib/asciidoctor/pdf/ext/prawn-svg.rb
+@@ -9,4 +9,4 @@
+ require_relative 'prawn-svg/loaders/web'
+ require_relative 'prawn-svg/url_loader'
+ # NOTE: disable system fonts since they're non-portable
+-Prawn::SVG::Interface.font_path.clear
++Prawn::SVG::FontRegistry.font_path.clear

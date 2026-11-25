@@ -2,3 +2,4 @@
 0002-Load-data-files-from-usr-share-ruby-asciidoctor-pdf.patch
 0003-Add-man-page.patch
 0004-man-Add-man-page-for-asciidoctor-pdf-optimize.patch
+0005-Switch-font-path-to-FontRegistry.patch
