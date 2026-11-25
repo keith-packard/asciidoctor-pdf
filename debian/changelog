@@ -1,3 +1,11 @@
+ruby-asciidoctor-pdf (2.3.28-1) unstable; urgency=medium
+
+  * New upstream version.
+  * Add change to support Prawn-SVG version 1.0.0
+  * Recommend asciidoctor-pdf from ruby-asciidoctor-pdf. (Closes: #1149226).
+
+ -- Keith Packard <keithp@keithp.com>  Wed, 25 Nov 2026 08:31:29 -0800
+
 ruby-asciidoctor-pdf (2.3.24-5) unstable; urgency=medium
 
   * Add autopkgtests
