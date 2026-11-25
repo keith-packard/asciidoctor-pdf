@@ -37,6 +37,7 @@ Depends: ruby (>= 1:2.5.1),
    ${ruby:Depends},
    ${misc:Depends}
 Suggests: ruby-rouge
+Recommends: asciidoctor-pdf
 Description: Ruby module for converting AsciiDoc documents to PDF using Prawn
  A ruby module providing an extension for Asciidoctor that converts
  AsciiDoc documents to PDF using the Prawn PDF library.
