@@ -2,10 +2,6 @@
 
 Prawn::Font::AFM.instance_variable_set :@hide_m17n_warning, true
 
-require 'prawn/icon'
-
-Prawn::Icon::Compatibility.prepend (Module.new { def warning *_args; end })
-
 module Asciidoctor
   module Prawn
     module Extensions
@@ -322,7 +318,7 @@ module Asciidoctor
         if name
           options = { size: options } if ::Numeric === options
           if IconSets.include? name
-            ::Prawn::Icon::FontData.load self, name
+            icon_font_data name
             options = options.reject {|k| k == :style } if options.key? :style
           end
         end
@@ -398,18 +394,23 @@ module Asciidoctor
         FontStyleToSet[style].dup
       end
 
-      # Override width of string to check for placeholder char, which uses character spacing to control width
-      #
-      def width_of_string string, options
-        string == PlaceholderChar ? @character_spacing : super
-      end
-
       def icon_font_data family
         ::Prawn::Icon::FontData.load self, family
       end
 
+      def icon_font_glyph family, key
+        (icon_font_data family).unicode key
+      rescue ::Prawn::Icon::Errors::IconNotFound # rubocop:disable Lint/SuppressedException
+      end
+
       def resolve_legacy_icon_name name
-        ::Prawn::Icon::Compatibility::SHIMS[%(fa-#{name})]
+        ::Prawn::Icon::Legacy.mapping[%(fa-#{name})]
+      end
+
+      # Override width of string to check for placeholder char, which uses character spacing to control width
+      #
+      def width_of_string string, options
+        string == PlaceholderChar ? @character_spacing : super
       end
 
       def calc_line_metrics line_height, font = self.font, font_size = self.font_size

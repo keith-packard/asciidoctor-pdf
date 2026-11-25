@@ -1565,6 +1565,33 @@ describe 'Asciidoctor::PDF::Converter - Table' do
         (expect (pdf.find_unique_text 'last cell')[:page_number]).to eql 3
       end).to log_message severity: :ERROR, message: 'the table cell on page 2 has been truncated; Asciidoctor PDF does not support table cell content that exceeds the height of a single page', file: 'test.adoc', lineno: 3
     end
+
+    it 'should center content in body cell vertically when vertical alignment is middle' do
+      pdf = to_pdf <<~'EOS', analyze: true
+      [%autowidth]
+      |===
+      .<| Ay<
+
+      Ay< .^| Ay^
+      |===
+      EOS
+
+      expected = pdf.text[0][:y] - (pdf.text[0][:y] - pdf.text[1][:y]) * 0.5
+      (expect expected - pdf.text[2][:y]).to be_between 0, 0.5
+    end
+
+    it 'should center content in head cell vertically when vertical alignment is middle' do
+      pdf = to_pdf <<~'EOS', analyze: true
+      [%header,width=50%]
+      |===
+      ^.^| Short ^.^| Something Rather Long ^.^| Last
+      |===
+      EOS
+
+      long_text = pdf.find_unique_text 'Something'
+      short_text = pdf.find_unique_text 'Short'
+      (expect long_text[:y]).to be > short_text[:y]
+    end
   end
 
   context 'Strong table cell' do
@@ -1960,6 +1987,21 @@ describe 'Asciidoctor::PDF::Converter - Table' do
       (expect pdf.lines).to eql ['10. ten', '11. eleven', '12. twelve', 'buckle', 'my', 'shoe']
     end
 
+    it 'should stretch autowidth table to width of bounds if it contains an AsciiDoc table cell' do
+      pdf = to_pdf <<~'EOS', analyze: :line
+      [%autowidth,grid=cols,frame=sides]
+      |===
+      |A a|B
+      |===
+      EOS
+
+      lines = pdf.lines
+      (expect lines).to have_size 4
+      (expect lines[0][:from][:x]).to eql 48.24
+      (expect lines[1][:from][:x]).to eql 61.6425
+      (expect lines[3][:from][:x]).to be > 500
+    end
+
     it 'should honor horizontal alignment on AsciiDoc table cell' do
       pdf = to_pdf <<~'EOS', analyze: true
       [cols=1a]
@@ -2274,33 +2316,6 @@ describe 'Asciidoctor::PDF::Converter - Table' do
       bottom_y = (pdf.find_text 'bottom')[0][:y]
       (expect middle_y).to eql ref_middle
       (expect bottom_y).to eql ref_bottom
-    end
-
-    it 'should align middle vertical alignment on cell to center' do
-      pdf = to_pdf <<~'EOS', analyze: true
-      [%autowidth]
-      |===
-      .<| Ay<
-
-      Ay< .^| Ay^
-      |===
-      EOS
-
-      expected = pdf.text[0][:y] - (pdf.text[0][:y] - pdf.text[1][:y]) * 0.5
-      (expect expected - pdf.text[2][:y]).to be_between 0, 0.5
-    end
-
-    it 'should coerce middle vertical alignment on head cell to center' do
-      pdf = to_pdf <<~'EOS', analyze: true
-      [%header,width=50%]
-      |===
-      ^.^| Short ^.^| Something Rather Long ^.^| Last
-      |===
-      EOS
-
-      long_text = pdf.find_unique_text 'Something'
-      short_text = pdf.find_unique_text 'Short'
-      (expect long_text[:y]).to be > short_text[:y]
     end
 
     it 'should apply cell padding to AsciiDoc table cell' do

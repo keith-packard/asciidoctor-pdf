@@ -188,6 +188,12 @@ module Asciidoctor
           font @theme.base_font_family, size: @root_font_size, style: @theme.base_font_style
         end
 
+        # HACK: demote abstract section to styled open block to hide from TOC
+        if doctype == 'article' && (first_section = doc.sections[0]) && first_section.sectname === 'abstract'
+          first_section.context = :open
+          first_section.style = 'abstract'
+        end
+
         unless title_as_page
           body_start_page_number = page_number
           theme_font :heading, level: 1 do
@@ -634,11 +640,8 @@ module Asciidoctor
       end
 
       def convert_section sect, _opts = {}
-        if (sectname = sect.sectname) == 'abstract'
-          # HACK: cheat a bit to hide this section from TOC; TOC should filter these sections
-          sect.context = :open
-          return convert_abstract sect
-        elsif (index_section = sectname == 'index') && @index.empty?
+        sectname = sect.sectname
+        if (index_section = sectname == 'index') && @index.empty?
           # override numbered_title to hide entry from TOC
           sect.define_singleton_method :numbered_title, ->(*) { '' }
           return
@@ -673,7 +676,7 @@ module Asciidoctor
         # QUESTION: should we just assign the section this generated id?
         # NOTE: section must have pdf-anchor in order to be listed in the TOC
         sect.set_attr 'pdf-anchor', (sect_anchor = derive_anchor_from_id sect.id, %(#{start_pgnum}-#{y.ceil}))
-        add_dest_for_block sect, id: sect_anchor, y: (at_page_top? ? page_height : nil)
+        add_dest_for_block sect, anchor: sect_anchor, y: (at_page_top? ? page_height : nil)
         theme_font :heading, level: hlevel do
           if part
             ink_part_title sect, title, hopts
@@ -932,8 +935,8 @@ module Asciidoctor
           if !(has_icon = node.attr? 'icon') && (doc.attr 'icons') == 'font'
             icons = 'font'
             icon_data = admonition_icon_data type.to_sym
-            icon_size = icon_data[:size] || 24
-            label_width = label_min_width || (icon_size * 1.5)
+            label_width = (icon_size = icon_data[:size] || 24) * 1.5
+            label_width = label_min_width if label_min_width && label_min_width > label_width
           elsif (icon_path = has_icon || !(icon_path = (@theme[%(admonition_icon_#{type})] || {})[:image]) ?
               (get_icon_image_path node, type) :
               (ThemeLoader.resolve_theme_asset (apply_subs_discretely doc, icon_path, subs: [:attributes], imagesdir: @themesdir), @themesdir)) &&
@@ -1939,7 +1942,7 @@ module Asciidoctor
       def convert_audio node
         add_dest_for_block node if node.id
         audio_path = node.media_uri node.attr 'target'
-        play_symbol = (node.document.attr? 'icons', 'font') ? %(<font name="fas">#{(icon_font_data 'fas').unicode 'play'}</font>) : RightPointer
+        play_symbol = (node.document.attr? 'icons', 'font') ? %(<font name="fas">#{icon_font_glyph 'fas', 'play'}</font>) : RightPointer
         ink_prose %(#{play_symbol}#{NoBreakSpace}<a href="#{audio_path}">#{audio_path}</a> <em>(audio)</em>), normalize: false, margin: 0
         ink_caption node, labeled: false, end: :bottom if node.title?
         theme_margin :block, :bottom, (next_enclosed_block node)
@@ -1967,7 +1970,7 @@ module Asciidoctor
 
         if poster.nil_or_empty?
           add_dest_for_block node if node.id
-          play_symbol = (node.document.attr? 'icons', 'font') ? %(<font name="fas">#{(icon_font_data 'fas').unicode 'play'}</font>) : RightPointer
+          play_symbol = (node.document.attr? 'icons', 'font') ? %(<font name="fas">#{icon_font_glyph 'fas', 'play'}</font>) : RightPointer
           ink_prose %(#{play_symbol}#{NoBreakSpace}<a href="#{video_path}">#{video_path}</a> <em>(#{type})</em>), normalize: false, margin: 0
           ink_caption node, labeled: false, end: :bottom if node.title?
           theme_margin :block, :bottom, (next_enclosed_block node)
@@ -2487,7 +2490,7 @@ module Asciidoctor
         target = node.target
         case node.type
         when :link
-          anchor = node.id ? %(<a id="#{node.id}">#{DummyText}</a>) : ''
+          anchor = node.id ? %(<a id="#{derive_anchor_from_id node.id}">#{DummyText}</a>) : ''
           attrs = []
           if (role = node.role)
             attrs << %( class="#{role}")
@@ -2522,7 +2525,7 @@ module Asciidoctor
                 text = text.gsub DropAnchorRx, ''
               end
               if ref.inline? && ref.type == :bibref && !scratch? && (@bibref_refs.add? refid)
-                anchor = %(<a id="_bibref_ref_#{refid}">#{DummyText}</a>)
+                anchor = %(<a id="#{derive_anchor_from_id "_bibref_ref_#{refid}"}">#{DummyText}</a>)
               end
               @resolving_xref = nil
             end
@@ -2532,14 +2535,14 @@ module Asciidoctor
           end
         when :ref
           # NOTE: destination is created inside callback registered by FormattedTextTransform#build_fragment
-          %(<a id="#{node.id}">#{DummyText}</a>)
+          %(<a id="#{derive_anchor_from_id node.id}">#{DummyText}</a>)
         when :bibref
           id = node.id
           # NOTE: technically node.text should be node.reftext, but subs have already been applied to text
           reftext = (reftext = node.reftext) ? %([#{reftext}]) : %([#{id}])
-          reftext = %(<a anchor="_bibref_ref_#{id}">#{reftext}</a>) if @bibref_refs.include? id
+          reftext = %(<a anchor="#{derive_anchor_from_id "_bibref_ref_#{id}"}">#{reftext}</a>) if @bibref_refs.include? id
           # NOTE: destination is created inside callback registered by FormattedTextTransform#build_fragment
-          %(<a id="#{id}">#{DummyText}</a>#{reftext})
+          %(<a id="#{derive_anchor_from_id id}">#{DummyText}</a>#{reftext})
         else
           log :warn, %(unknown anchor type: #{node.type.inspect})
           nil
@@ -2596,23 +2599,22 @@ module Asciidoctor
             if (remapped_icon_name = resolve_legacy_icon_name icon_name)
               requested_icon_name = icon_name
               icon_set, icon_name = remapped_icon_name.split '-', 2
-              glyph = (icon_font_data icon_set).unicode icon_name
+              glyph = icon_font_glyph icon_set, icon_name
               log(:info) { %(#{requested_icon_name} icon found in deprecated fa icon set; using #{icon_name} from #{icon_set} icon set instead) }
             # new name in Font Awesome >= 5 (but document is configured to use fa icon set)
             else
-              font_data = nil
-              if (resolved_icon_set = FontAwesomeIconSets.find {|candidate| (font_data = icon_font_data candidate).unicode icon_name rescue nil })
+              glyph = nil
+              if (resolved_icon_set = FontAwesomeIconSets.find {|candidate| glyph = icon_font_glyph candidate, icon_name })
                 icon_set = resolved_icon_set
-                glyph = font_data.unicode icon_name
                 log(:info) { %(#{icon_name} icon not found in deprecated fa icon set; using match found in #{resolved_icon_set} icon set instead) }
               end
             end
           else
-            glyph = (icon_font_data icon_set).unicode icon_name rescue nil
+            glyph = icon_font_glyph icon_set, icon_name
           end
           unless glyph || explicit_icon_set || !icon_name.start_with?(*IconSetPrefixes)
             icon_set, icon_name = icon_name.split '-', 2
-            glyph = (icon_font_data icon_set).unicode icon_name rescue nil
+            glyph = icon_font_glyph icon_set, icon_name
           end
           if glyph
             if node.attr? 'size'
@@ -2782,7 +2784,7 @@ module Asciidoctor
         end
 
         # NOTE: destination is created inside callback registered by FormattedTextTransform#build_fragment
-        node.id ? %(<a id="#{node.id}">#{DummyText}</a>#{quoted_text}) : quoted_text
+        node.id ? %(<a id="#{derive_anchor_from_id node.id}">#{DummyText}</a>#{quoted_text}) : quoted_text
       end
 
       # If an id is provided or the node passed as the first argument has an id,
@@ -2795,8 +2797,8 @@ module Asciidoctor
       # experience. If the current x position is at or inside the left margin, set
       # the x position equal to 0 (left edge of page) to improve the navigation
       # experience.
-      def add_dest_for_block node, id: nil, y: nil
-        if !scratch? && (id ||= node.id)
+      def add_dest_for_block node, anchor: nil, id: nil, y: nil
+        if !scratch? && (anchor || ((id ||= node.id) && (anchor = derive_anchor_from_id id)))
           dest_x = bounds.absolute_left.truncate 4
           # QUESTION: when content is aligned to left margin, should we keep precise x value or just use 0?
           dest_x = 0 if dest_x <= page_margin_left
@@ -2806,7 +2808,7 @@ module Asciidoctor
           end
           # TODO: find a way to store only the ref of the destination; look it up when we need it
           node.set_attr 'pdf-destination', (node_dest = (dest_xyz dest_x, dest_y))
-          add_dest id, node_dest
+          add_dest anchor, node_dest
         end
         nil
       end
@@ -2835,7 +2837,7 @@ module Asciidoctor
           pagenum_labels[n] = { P: (::PDF::Core::LiteralString.new (i + 1).to_s) }
         end
 
-        unless toc_page_nums.none? || (toc_title = doc.attr 'toc-title').nil_or_empty?
+        unless toc_page_nums.none? || (toc_title = doc.attr 'toc-title').nil_or_empty? || doc.sections.empty?
           toc_section = insert_toc_section doc, toc_title, toc_page_nums
         end
 
@@ -2864,6 +2866,7 @@ module Asciidoctor
           next if (num_levels_for_sect = (sect.attr 'outlinelevels', num_levels).to_i) < (level = sect.level) ||
             ((sect.option? 'notitle') && sect == sect.document.last_child && sect.empty?)
           sect_title = sanitize sect.numbered_title formal: true
+          next if sect_title.empty?
           sect_destination = sect.attr 'pdf-destination'
           if level < num_levels_for_sect && sect.sections?
             outline.section sect_title, destination: sect_destination, closed: expand_levels < 1 do
@@ -3655,7 +3658,7 @@ module Asciidoctor
             end
             toc_page_nums = nil if toc_page_nums.end == pgnum
           elsif last_chap == :pre
-            chapters_by_page[pgnum] = pgnum < body_start_page_number ? doc.doctitle : (doc.attr 'preface-title', 'Preface')
+            chapters_by_page[pgnum] = pgnum < body_start_page_number ? doc.doctitle : (doc.attr 'preface-title', (doc.attr_unspecified? 'preface-title') ? 'Preface' : '')
             sections_by_page[pgnum] = last_sect
           else
             chapters_by_page[pgnum] = last_chap
@@ -3990,9 +3993,9 @@ module Asciidoctor
         entries.each do |entry|
           next if (num_levels_for_entry = (entry.attr 'toclevels', num_levels).to_i) < (entry_level = entry.level + 1).pred ||
             ((entry.option? 'notitle') && entry == entry.document.last_child && entry.empty?)
+          entry_title = entry.context == :section ? entry.numbered_title : (entry.title? ? entry.title : (entry.xreftext 'basic'))
+          next if entry_title.empty?
           theme_font :toc, level: entry_level do
-            entry_title = entry.context == :section ? entry.numbered_title : (entry.title? ? entry.title : (entry.xreftext 'basic'))
-            next if entry_title.empty?
             entry_title = entry_title.gsub DropAnchorRx, '' if entry_title.include? '<a'
             entry_title = transform_text entry_title, @text_transform if @text_transform
             pgnum_label_placeholder_width = rendered_width_of_string '0' * @toc_max_pagenum_digits
@@ -4073,7 +4076,7 @@ module Asciidoctor
       def intrinsic_image_dimensions path, format
         if format == 'svg'
           # NOTE: prawn-svg automatically converts intrinsic width and height to pt
-          img_obj = ::Prawn::SVG::Interface.new (::File.read path, mode: 'r:UTF-8'), self, {}
+          img_obj = ::Prawn::SVG::Interface.new (::File.read path, mode: 'r:UTF-8'), self, enable_web_requests: false
           img_size = img_obj.document.sizing
           { width: img_size.output_width, height: img_size.output_height }
         else
@@ -4939,7 +4942,7 @@ module Asciidoctor
       end
 
       def conum_glyph number
-        @conum_glyphs[number - 1]
+        @conum_glyphs[number - 1] || %((#{number}))
       end
 
       # Derive a PDF-safe, ASCII-only anchor name from the given value.
@@ -4948,7 +4951,7 @@ module Asciidoctor
       def derive_anchor_from_id value, default_value = nil
         if value
           value.ascii_only? ? value : %(0x#{::PDF::Core.string_to_hex value})
-        else
+        elsif default_value
           %(__anchor-#{default_value})
         end
       end

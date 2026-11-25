@@ -410,7 +410,7 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       (expect to_file).to visually_match 'image-pdfwidth-percentage.pdf'
     end
 
-    it 'should scale raster image as percentage of intrinsic size', visual: true do
+    it 'should scale raster image as percentage of intrinsic size' do
       ['scale=75', 'pdfwidth=75iw'].each do |width_attr|
         pdf = to_pdf <<~EOS, attribute_overrides: { 'imagesdir' => examples_dir }, analyze: :image
         image::wolpertinger.jpg[,144,#{width_attr}]
@@ -586,6 +586,29 @@ describe 'Asciidoctor::PDF::Converter - Image' do
       (expect text).to have_size 1
       (expect text[0][:string]).to eql 'after'
       (expect text[0][:y]).to eql 276.036
+    end
+
+    it 'should scale viewBox to match width specified on SVG' do
+      input = <<~'EOS'
+      :pdf-page-size: 200x400
+      :pdf-page-margin: 0
+
+      image::square-scaled-viewbox.svg[]
+
+      after
+      EOS
+
+      pdf = to_pdf input, analyze: :rect
+      (expect pdf.rectangles).to have_size 1
+      (expect pdf.rectangles[0][:point]).to eql [0.0, 200.0]
+      (expect pdf.rectangles[0][:width]).to eql 200.0
+      (expect pdf.rectangles[0][:height]).to eql 200.0
+
+      pdf = to_pdf input, analyze: true
+      text = pdf.text
+      (expect text).to have_size 1
+      (expect text[0][:string]).to eql 'after'
+      (expect text[0][:y]).to eql 176.036
     end
 
     it 'should compute width correctly when SVG defines width in px units', visual: true do
@@ -994,12 +1017,14 @@ describe 'Asciidoctor::PDF::Converter - Image' do
     end
 
     it 'should embed SVG image from data-uri in SVG', visual: true do
-      pdf = to_pdf 'image::svg-with-data-uri-svg-image.svg[]', analyze: :rect
-      (expect pdf.rectangles).to have_size 1
-      (expect pdf.rectangles[0][:fill_color]).to eql 'FF0000'
+      to_file = to_pdf_file <<~'EOS', 'image-block-svg-with-data-uri-svg-image.pdf'
+      image::svg-with-data-uri-svg-image.svg[]
+      EOS
+
+      (expect to_file).to visually_match 'image-block-svg-with-svg-image.pdf'
     end
 
-    it 'should support non-standard image/jpg MIME type', visual: true do
+    it 'should support non-standard image/jpg MIME type' do
       image_data = File.binread fixture_file 'square.jpg'
       pdf = to_pdf 'image::svg-with-data-uri-jpg-image.svg[pdfwidth=1.27cm]', analyze: :image
       images = pdf.images
@@ -1108,6 +1133,17 @@ describe 'Asciidoctor::PDF::Converter - Image' do
     it 'should render linear gradient in SVG', visual: true do
       to_file = to_pdf_file 'image::gradient.svg[pdfwidth=100%]', 'image-svg-with-gradient.pdf'
       (expect to_file).to visually_match 'image-svg-with-gradient.pdf'
+    end
+
+    it 'should render linear gradient in SVG that follows SVG with different transformation matrix', visual: true do
+      to_file = to_pdf_file <<~'EOS', 'image-multiple-svgs-with-gradient.pdf'
+      image::gradient.svg[]
+
+      image::square.svg[pdfwidth=100]
+
+      image::gradient.svg[]
+      EOS
+      (expect to_file).to visually_match 'image-multiple-svgs-with-gradient.pdf'
     end
 
     it 'should set graphic state for running content when image occupies whole page' do

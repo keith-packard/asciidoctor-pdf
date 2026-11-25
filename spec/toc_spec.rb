@@ -1136,6 +1136,20 @@ describe 'Asciidoctor::PDF::Converter - TOC' do
       (expect pdf.find_text 'Table of Contents').to be_empty
     end
 
+    it 'should not generate toc if article only contains abstract section' do
+      pdf = to_pdf <<~'EOS', analyze: true
+      = Document Title
+      :toc:
+
+      [abstract]
+      == Abstract
+
+      About this article.
+      EOS
+      (expect pdf.pages).to have_size 1
+      (expect pdf.find_text 'Table of Contents').to be_empty
+    end
+
     it 'should insert toc between document title and content when toc is set' do
       lorem = ['lorem ipsum'] * 10 * %(\n\n)
       input = <<~EOS
@@ -1571,6 +1585,27 @@ describe 'Asciidoctor::PDF::Converter - TOC' do
     (expect pdf.text).to have_size 2
     (expect pdf.find_unique_text 'content').not_to be_nil
     (expect pdf.find_unique_text 'Table of Contents').not_to be_nil
+  end
+
+  it 'should not include section title or its children in toc if title is empty' do
+    pdf = to_pdf <<~'EOS', analyze: true
+    = Document Title
+    :toc:
+    :title-page:
+
+    == First Section
+
+    == {empty}
+
+    === Child Section
+
+    content
+    EOS
+
+    toc_lines = pdf.lines pdf.find_text page_number: 2
+    (expect toc_lines).to have_size 2
+    (expect toc_lines[0]).to eql 'Table of Contents'
+    (expect toc_lines[1]).to start_with 'First Section'
   end
 
   it 'should allocate correct number of pages for toc if line numbers cause lines to wrap' do
